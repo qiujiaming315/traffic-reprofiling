@@ -76,6 +76,43 @@ def no_shaping(route, flow_profile, objective, weight):
     return total_bandwidth
 
 
+def greedy(route, flow_profile, objective, weight, num_iter):
+    """
+    Use the heuristic-based greedy algorithm to efficiently approximate the optimal solution (for two-slope shapers
+    only, guaranteed to be no worse than both the rate-proportional solution and the no shaping solution).
+    :param route: the network routes.
+    :param flow_profile: the flow profile.
+    :param objective: the objective function.
+    :param weight: the bandwidth weight profile.
+    :param num_iter: number of iteration.
+    :return: the improved solution.
+    """
+    # Compute the rate required by each flow under rate-proportional solution.
+    zero_ddl = 1e-5
+    num_flow, num_link = route.shape
+    flow_rate = np.concatenate(
+        (flow_profile[:, 0][np.newaxis, :], flow_profile[:, 1][np.newaxis, :] / flow_profile[:, 2][np.newaxis, :]),
+        axis=0)
+    flow_rate = np.amax(flow_rate, axis=0)
+    best_solution = get_objective(np.sum(route * flow_rate[:, np.newaxis], axis=0), objective, weight)
+    burst, deadline = flow_profile[:, 1], flow_profile[:, 2]
+    # Transform the rates into angles and create evenly split angles to generate different initial solutions.
+    flow_arc = np.arctan(flow_rate)
+    flow_arcs = np.linspace(flow_arc, np.pi / 2, num=num_iter + 1)
+    for arc in flow_arcs[1:]:
+        rate = np.tan(arc)
+        shaping_delay = burst / rate
+        # Handle the special case of no shaping.
+        if all(shaping_delay < zero_ddl):
+            shaping_delay = np.zeros_like(shaping_delay)
+        ddl = ((deadline - shaping_delay) / np.sum(route, axis=1))[:, np.newaxis] * np.ones((num_link,))
+        ddl = np.where(route, ddl, 0)
+        bandwidth = bandwidth_two_slope(route, flow_profile, shaping_delay, ddl)
+        new_solution = improve_solution(route, flow_profile, (shaping_delay, ddl, bandwidth), objective, weight, True)
+        best_solution = min(best_solution, new_solution)
+    return best_solution
+
+
 def get_objective(bandwidth, objective, weight):
     """
     Compute the network bandwidth according to the objective function.
@@ -177,42 +214,6 @@ def improve_solution(route, flow_profile, solution, objective, weight, two_slope
         # Improve the solution.
         shaping_delay, ddl, bandwidth = improve_func(route, flow_profile, shaping_delay, ddl)
     return current_bandwidth
-
-
-def improve_rate_proportional(route, flow_profile, objective, weight, num_iter):
-    """
-    Use the heuristic-based algorithm to improve the rate-proportional solution (for two-slope shapers only).
-    :param route: the network routes.
-    :param flow_profile: the flow profile.
-    :param objective: the objective function.
-    :param weight: the bandwidth weight profile.
-    :param num_iter: number of iteration.
-    :return: the improved solution.
-    """
-    # Compute the rate required by each flow under rate-proportional solution.
-    zero_ddl = 1e-5
-    num_flow, num_link = route.shape
-    flow_rate = np.concatenate(
-        (flow_profile[:, 0][np.newaxis, :], flow_profile[:, 1][np.newaxis, :] / flow_profile[:, 2][np.newaxis, :]),
-        axis=0)
-    flow_rate = np.amax(flow_rate, axis=0)
-    best_solution = get_objective(np.sum(route * flow_rate[:, np.newaxis], axis=0), objective, weight)
-    burst, deadline = flow_profile[:, 1], flow_profile[:, 2]
-    # Transform the rates into angles and create evenly split angles to generate different initial solutions.
-    flow_arc = np.arctan(flow_rate)
-    flow_arcs = np.linspace(flow_arc, np.pi / 2, num=num_iter + 1)
-    for arc in flow_arcs[1:]:
-        rate = np.tan(arc)
-        shaping_delay = burst / rate
-        # Handle the special case of no shaping.
-        if all(shaping_delay < zero_ddl):
-            shaping_delay = np.zeros_like(shaping_delay)
-        ddl = ((deadline - shaping_delay) / np.sum(route, axis=1))[:, np.newaxis] * np.ones((num_link,))
-        ddl = np.where(route, ddl, 0)
-        bandwidth = bandwidth_two_slope(route, flow_profile, shaping_delay, ddl)
-        new_solution = improve_solution(route, flow_profile, (shaping_delay, ddl, bandwidth), objective, weight, True)
-        best_solution = min(best_solution, new_solution)
-    return best_solution
 
 
 def bandwidth_one_slope(route, flow_profile, shaping_delay, ddl):

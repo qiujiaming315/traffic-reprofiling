@@ -10,7 +10,8 @@ def load_net(net_path, flow_path):
     :param flow_path: location of flow profile.
     :return: the loaded data.
     """
-    net_topology, flow_profile = np.load(net_path), np.load(flow_path)
+    net_topology, flow_data = np.load(net_path), np.load(flow_path)
+    flow_profile, flow_hop = flow_data['flow'], flow_data['per_hop']
     net_type = net_topology.dtype
     assert net_type is np.dtype(bool) or net_type is np.dtype(
         int), f"Incorrect data type ({net_type}) for network profile. Expect bool or int."
@@ -29,7 +30,7 @@ def load_net(net_path, flow_path):
     assert np.all(flow_profile >= 0), "All the values in flow profile should be non-negative."
     assert net_topology.shape[0] == flow_profile.shape[
         0], "Inconsistent flow number in network and flow profile detected."
-    return net_topology, flow_profile
+    return net_topology, (flow_profile, flow_hop)
 
 
 def load_weight(objective, weight_path, num_link):
@@ -40,9 +41,9 @@ def load_weight(objective, weight_path, num_link):
     :param num_link: number of link in the network.
     :return: the loaded weight.
     """
-    assert any([objective == obj for obj in [0, 1, 2]]), "Objective function must be one of 0 (total link " + \
-                                                         "bandwidth), 1 (weighted total link bandwidth), " + \
-                                                         "or 2 (maximum link bandwidth)."
+    assert any([objective == obj for obj in [0, 1, 2]]), "Objective function (--objective) must be one of 0 " + \
+                                                         "(total link bandwidth), 1 (weighted total " + \
+                                                         "link bandwidth), or 2 (maximum link bandwidth)."
     weight = np.ones((num_link,), dtype=float)
     if objective == 1 and weight_path != "":
         weight = np.load(weight_path)
@@ -50,6 +51,16 @@ def load_weight(objective, weight_path, num_link):
         assert weight.ndim == 1, f"Incorrect dimension number ({weight.ndim}) for weight profile. Expect 1."
         assert len(weight) == num_link, "Inconsistent link number in network and weight profile detected."
     return weight
+
+
+def check_mode(mode):
+    """
+    Check the execution mode.
+    :param mode: the execution mode.
+    """
+    assert any([mode == m for m in [0, 1, 2]]), "Execution mode (--fast) must be one of 0 (accurate mode)" + \
+                                                ", 1 (fast mode), or 2 (greedy mode)."
+    return mode
 
 
 def add_set(order_set, item):

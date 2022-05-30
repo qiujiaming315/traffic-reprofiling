@@ -64,7 +64,11 @@ def generate_parking_lot(num_hop, num_flow_main, num_hop_cross, num_flow_cross, 
 
 
 def save_file(output_path, net):
-    """Save the generated network routes to the specified output location."""
+    """
+    Save the generated network routes to the specified output location.
+    :param output_path: the path of directory to save the network profile.
+    :param net: the network profile.
+    """
     num_flow = net.shape[0]
     output_path = os.path.join(output_path, str(num_flow), "")
     Path(output_path).mkdir(parents=True, exist_ok=True)

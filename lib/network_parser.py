@@ -255,8 +255,7 @@ def bandwidth_one_slope_(link_mask, link_ddl, rate, burst):
     min_bd = rate_cum * ddl_int + link_burst
     min_bd = np.cumsum(min_bd)
     zero_mask = np.logical_and(min_bd < zero_ddl, link_ddl < zero_ddl)
-    min_bd = min_bd / link_ddl
-    min_bd = np.where(zero_mask, 0, min_bd)
+    min_bd = np.divide(min_bd, link_ddl, out=np.zeros_like(min_bd), where=np.logical_not(zero_mask))
     return min_bd, np.sum(link_rate)
 
 
@@ -273,7 +272,8 @@ def bandwidth_two_slope(route, flow_profile, shaping_delay, ddl):
     num_flow, num_link = route.shape
     actual_bandwidth = np.zeros((num_link,))
     zs_mask = shaping_delay < zero_ddl
-    short_rate = np.where(zs_mask, flow_profile[:, 0], flow_profile[:, 1] / shaping_delay)
+    short_rate = np.divide(flow_profile[:, 1], shaping_delay, out=np.copy(flow_profile[:, 0]),
+                           where=np.logical_not(zs_mask))
     burst = np.where(zs_mask, flow_profile[:, 1], 0)
     rate = np.concatenate((short_rate, flow_profile[:, 0] - short_rate))
     for link_idx in range(num_link):
@@ -311,8 +311,7 @@ def bandwidth_two_slope_(link_mask, link_ddl, rate, burst, shaping_delay):
     min_bd = np.cumsum(min_bd)
     min_bd, link_ddl = min_bd[rate_mask], link_ddl[rate_mask]
     zero_mask = np.logical_and(min_bd < zero_ddl, link_ddl < zero_ddl)
-    min_bd = min_bd / link_ddl
-    min_bd = np.where(zero_mask, 0, min_bd)
+    min_bd = np.divide(min_bd, link_ddl, out=np.zeros_like(min_bd), where=np.logical_not(zero_mask))
     return min_bd, np.sum(link_rate)
 
 
@@ -352,7 +351,8 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
         link_long_rate, link_burst = long_rate[link_sort], burst[link_sort]
         # Compute the link bandwidth and room for reshaping for each flow.
         zs_mask = shaping_delay < zero_ddl
-        short_rate = np.where(zs_mask, flow_profile[:, 0], flow_profile[:, 1] / shaping_delay)
+        short_rate = np.divide(flow_profile[:, 1], shaping_delay, out=np.copy(flow_profile[:, 0]),
+                               where=np.logical_not(zs_mask))
         burst_mask = np.where(zs_mask, burst, 0)
         rate = np.concatenate((short_rate, flow_profile[:, 0] - short_rate))
         min_bd, link_rate = bandwidth_two_slope_(route[:, link_idx], ddl[:, link_idx], rate, burst_mask, shaping_delay)
@@ -367,7 +367,7 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
             left = bisect.bisect_right(link_sddl, flow_ddl + zero_ddl)
             right = bisect.bisect_left(link_sddl, ddl2 + s - zero_ddl)
             for x, y in zip(link_sddl[left:right], shaping_room[left:right]):
-                y_max = max(0, x - ddl2) * b / s + y
+                y_max = y if s == 0 else max(0, x - ddl2) * b / s + y
                 if y_max < b:
                     flow_ddl = max(flow_ddl, (b * x - y_max * (ddl2 + s)) / (b - y_max))
             # Update the data according to the reshaping decision.
@@ -376,7 +376,8 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
             link_shaping[flow_idx] = ddl2 + s - flow_ddl
             left = bisect.bisect_right(link_sddl, flow_ddl + zero_ddl)
             for idx, x in enumerate(link_sddl[left:right]):
-                shaping_room[left + idx] -= b * (max(0, x - flow_ddl) / (ddl2 + s - flow_ddl) - max(0, x - ddl2) / s)
+                x_old = 0 if s == 0 else max(0, x - ddl2) / s
+                shaping_room[left + idx] -= b * ((x - flow_ddl) / (ddl2 + s - flow_ddl) - x_old)
         ddl[:, link_idx][link_sort] = link_ddl
         shaping_delay[link_sort] = link_shaping
     return shaping_delay, ddl, actual_bandwidth

@@ -22,7 +22,7 @@ def main(opts):
     net_profile, (flow_profile, flow_hop) = load_net(opts.net, opts.flow)
     route = net_parser.parse_link(net_profile)
     if flow_hop:
-        flow_profile[:, 2] = flow_profile[:, 2] * route.shape[1]
+        flow_profile[:, 2] = flow_profile[:, 2] * np.sum(route, axis=1)
     weight = load_weight(opts.objective, opts.weight, route.shape[1])
     rp_solution = net_parser.rate_proportional(route, flow_profile, opts.objective, weight)
     ns_solution = net_parser.no_shaping(route, flow_profile, opts.objective, weight)
@@ -52,7 +52,7 @@ def main(opts):
         result[key] = value
 
     net_idx = re.match(r"net(\d+)\.npy", opts.net.split('/')[-1]).group(1)
-    flow_idx = re.match(r"flow(\d+)\.npy", opts.flow.split('/')[-1]).group(1)
+    flow_idx = re.match(r"flow(\d+)\.npz", opts.flow.split('/')[-1]).group(1)
     dir_name = "/two_slope" if opts.two_slope else "/one_slope"
     dir_name += ["/sum", "/weight", "/max"][opts.objective]
     if opts.two_slope:

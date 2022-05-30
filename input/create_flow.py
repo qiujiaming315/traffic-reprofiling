@@ -48,10 +48,11 @@ def save_file(output_path, flow, per_hop=False):
 
 
 if __name__ == "__main__":
-    output_path = "./flow/random/"
+    output_path = "./flow/parking_lot/"
     flow = np.array([[15.0, 8.0, 1.0],
                      [2.0, 4.0, 2.0],
                      [3.0, 13.0, 5.0]
                      ])
-    save_file(output_path, generate_random_flow(4), True)
+    for _ in range(1000):
+        save_file(output_path, generate_random_flow(207), True)
     # save_file(output_path, flow)

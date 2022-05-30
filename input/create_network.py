@@ -83,5 +83,5 @@ if __name__ == "__main__":
                     [1, 1, 1],
                     [0, 1, 1]
                     ])
-    save_file(output_path, generate_parking_lot(10, 3, 3, 2, 2))
+    save_file(output_path, generate_parking_lot(100, 3, 3, 2, 1))
     # save_file(output_path, net.astype(bool))

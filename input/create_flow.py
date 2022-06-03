@@ -17,9 +17,10 @@ def generate_random_flow(num_flow=None, seed=None):
     # rate_bound = (0, 5)
     # burst_bound = (0, 20)
     # deadline_class = np.array([1, 5, 10, 20])
-    rate_bound = (1, 10)
-    burst_bound = (1, 30)
+    rate_bound = (1, 100)
+    burst_bound = (1, 100)
     deadline_class = np.array([0.01, 0.1, 1])
+    # deadline_class = np.array([0.01, 0.025, 0.05, 0.1])
     # Randomly generate a flow profile.
     rstate = np.random.RandomState(seed)
     if num_flow is None:
@@ -54,5 +55,5 @@ if __name__ == "__main__":
                      [3.0, 13.0, 5.0]
                      ])
     for _ in range(1000):
-        save_file(output_path, generate_random_flow(207), True)
+        save_file(output_path, generate_random_flow(23), True)
     # save_file(output_path, flow)

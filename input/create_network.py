@@ -49,16 +49,23 @@ def generate_parking_lot(num_hop, num_flow_main, num_hop_cross, num_flow_cross, 
     :return: a numpy matrix that describes the network routing for each flow.
     """
     net_main = np.ones((num_flow_main, num_hop + 1), dtype=int)
-    net_cross1 = np.eye(num_hop - num_hop_cross + 1, num_hop + 1, dtype=int)
-    net_cross2 = np.eye(num_hop - num_hop_cross + 1, num_hop + 1, k=num_hop_cross + 1, dtype=int)
-    net_cross = np.cumsum(net_cross1 - net_cross2, axis=1)
+    if num_hop >= num_hop_cross:
+        num_col = num_hop + 1
+        net_cross1 = np.eye(num_hop - num_hop_cross + 1, num_col, dtype=int)
+        net_cross2 = np.eye(num_hop - num_hop_cross + 1, num_col, k=num_hop_cross + 1, dtype=int)
+        net_cross = np.cumsum(net_cross1 - net_cross2, axis=1)
+    else:
+        num_col = num_hop_cross
+        net_cross = np.ones((0, num_col), dtype=int)
     if pad:
-        net_pad = np.eye(num_hop_cross - 1, num_hop + 1, k=num_hop - num_hop_cross + 1, dtype=int)
+        net_pad = np.eye(num_hop_cross - 1, num_col, k=num_col - num_hop_cross, dtype=int)
         net_pad = np.cumsum(net_pad, axis=1)
         net_cross = np.concatenate((net_cross, net_pad), axis=0)
         net_cross = np.concatenate((net_pad[::-1, ::-1], net_cross), axis=0)
     net_cross = net_cross[::stride_cross]
     net_cross = np.repeat(net_cross, num_flow_cross, axis=0)
+    net_cross = net_cross[:, :num_hop + 1]
+    net_cross = net_cross[np.sum(net_cross, axis=1) > 1]
     net = np.concatenate((net_main, net_cross), axis=0).astype(bool)
     return net
 
@@ -83,5 +90,6 @@ if __name__ == "__main__":
                     [1, 1, 1],
                     [0, 1, 1]
                     ])
-    save_file(output_path, generate_parking_lot(100, 3, 3, 2, 1))
+    save_file(output_path, generate_parking_lot(2, 4, 4, 1, 1))
+    # save_file(output_path, generate_parking_lot(9, 3, 3, 2, 3))
     # save_file(output_path, net.astype(bool))

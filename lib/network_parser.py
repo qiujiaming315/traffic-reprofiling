@@ -94,12 +94,15 @@ def greedy(route, flow_profile, objective, weight, num_iter):
         (flow_profile[:, 0][np.newaxis, :], flow_profile[:, 1][np.newaxis, :] / flow_profile[:, 2][np.newaxis, :]),
         axis=0)
     flow_rate = np.amax(flow_rate, axis=0)
-    best_solution = get_objective(np.sum(route * flow_rate[:, np.newaxis], axis=0), objective, weight)
+    best_solution, best_shaping, best_ddl = np.inf, None, None
     burst, deadline = flow_profile[:, 1], flow_profile[:, 2]
     # Transform the rates into angles and create evenly split angles to generate different initial solutions.
     flow_arc = np.arctan(flow_rate)
     flow_arcs = np.linspace(flow_arc, np.pi / 2, num=num_iter + 1)
-    for arc in flow_arcs[1:]:
+    # flow_arcs = np.random.rand(num_iter - 1, num_flow)
+    # flow_arcs = flow_arcs * (np.pi / 2 - flow_arc) + flow_arc
+    # flow_arcs = np.concatenate((flow_arc[np.newaxis, :], flow_arcs, np.ones((1, num_flow)) * np.pi / 2), axis=0)
+    for arc in flow_arcs:
         rate = np.tan(arc)
         shaping_delay = burst / rate
         # Handle the special case of no shaping.
@@ -108,9 +111,11 @@ def greedy(route, flow_profile, objective, weight, num_iter):
         ddl = ((deadline - shaping_delay) / np.sum(route, axis=1))[:, np.newaxis] * np.ones((num_link,))
         ddl = np.where(route, ddl, 0)
         bandwidth = bandwidth_two_slope(route, flow_profile, shaping_delay, ddl)
-        new_solution = improve_solution(route, flow_profile, (shaping_delay, ddl, bandwidth), objective, weight, True)
-        best_solution = min(best_solution, new_solution)
-    return best_solution
+        new_solution, shaping_delay, ddl = improve_solution(route, flow_profile, (shaping_delay, ddl, bandwidth),
+                                                            objective, weight, True)
+        if new_solution < best_solution:
+            best_solution, best_shaping, best_ddl = new_solution, shaping_delay, ddl
+    return best_solution, best_shaping, best_ddl
 
 
 def get_objective(bandwidth, objective, weight):
@@ -213,7 +218,7 @@ def improve_solution(route, flow_profile, solution, objective, weight, two_slope
         prev_bandwidth = current_bandwidth
         # Improve the solution.
         shaping_delay, ddl, bandwidth = improve_func(route, flow_profile, shaping_delay, ddl)
-    return current_bandwidth
+    return current_bandwidth, shaping_delay, ddl
 
 
 def bandwidth_one_slope(route, flow_profile, shaping_delay, ddl):
@@ -337,14 +342,19 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
     :param ddl: the local deadlines of the solution.
     :return: the shaping delay and local deadlines after improvement.
     """
-    zero_ddl = 1e-5
+    zero_ddl = 1e-6
     num_flow, num_link = route.shape
     long_rate, burst = flow_profile[:, 0], flow_profile[:, 1]
-    actual_bandwidth = np.zeros((num_link,))
+    # Pre-processing to determine the order to improve the links.
+    num_cover = np.zeros((num_link,), dtype=int)
     for link_idx in range(num_link):
+        sub_net = route[route[:, link_idx]]
+        num_cover[link_idx] = np.sum(np.any(sub_net, axis=0))
+    link_order = np.arange(num_link)[np.argsort(-num_cover)]
+    for link_idx in link_order:
         # Retrieve the link related data.
         link_mask, link_ddl = route[:, link_idx], ddl[:, link_idx]
-        link_sort = np.argsort(link_ddl)
+        link_sort = np.argsort(-(link_ddl + shaping_delay))
         link_mask = link_mask[link_sort]
         link_sort = link_sort[link_mask]
         link_ddl, link_shaping = link_ddl[link_sort], shaping_delay[link_sort]
@@ -357,13 +367,11 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
         rate = np.concatenate((short_rate, flow_profile[:, 0] - short_rate))
         min_bd, link_rate = bandwidth_two_slope_(route[:, link_idx], ddl[:, link_idx], rate, burst_mask, shaping_delay)
         bandwidth = max(np.nanmax(min_bd), link_rate)
-        actual_bandwidth[link_idx] = bandwidth
         link_sddl = np.sort(link_ddl + link_shaping)
         shaping_room = (bandwidth - min_bd) * link_sddl
         # Reshape each flow and update the shaping delay and local deadline.
-        ddl1 = 0
         for flow_idx, (ddl2, s, r, b) in enumerate(zip(link_ddl, link_shaping, link_long_rate, link_burst)):
-            flow_ddl = max(ddl1, ddl2 + s - b / r)
+            flow_ddl = max(0, ddl2 + s - b / r)
             left = bisect.bisect_right(link_sddl, flow_ddl + zero_ddl)
             right = bisect.bisect_left(link_sddl, ddl2 + s - zero_ddl)
             for x, y in zip(link_sddl[left:right], shaping_room[left:right]):
@@ -372,7 +380,7 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
                     flow_ddl = max(flow_ddl, (b * x - y_max * (ddl2 + s)) / (b - y_max))
             # Update the data according to the reshaping decision.
             assert flow_ddl < ddl2 + zero_ddl
-            link_ddl[flow_idx] = ddl1 = flow_ddl
+            link_ddl[flow_idx] = flow_ddl
             link_shaping[flow_idx] = ddl2 + s - flow_ddl
             left = bisect.bisect_right(link_sddl, flow_ddl + zero_ddl)
             for idx, x in enumerate(link_sddl[left:right]):
@@ -380,4 +388,6 @@ def improve_two_slope(route, flow_profile, shaping_delay, ddl):
                 shaping_room[left + idx] -= b * ((x - flow_ddl) / (ddl2 + s - flow_ddl) - x_old)
         ddl[:, link_idx][link_sort] = link_ddl
         shaping_delay[link_sort] = link_shaping
+    # Compute the actual bandwidth after one iteration of traffic smoothing.
+    actual_bandwidth = bandwidth_two_slope(route, flow_profile, shaping_delay, ddl)
     return shaping_delay, ddl, actual_bandwidth

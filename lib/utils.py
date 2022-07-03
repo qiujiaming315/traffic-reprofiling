@@ -13,8 +13,8 @@ def load_net(net_path, flow_path):
     net_topology, flow_data = np.load(net_path), np.load(flow_path)
     flow_profile, flow_hop = flow_data['flow'], flow_data['per_hop']
     net_type = net_topology.dtype
-    assert net_type is np.dtype(bool) or net_type is np.dtype(
-        int), f"Incorrect data type ({net_type}) for network profile. Expect bool or int."
+    assert net_type is np.dtype(bool) or np.issubdtype(net_type, np.integer), f"Incorrect data type ({net_type}) " + \
+                                                                              "for network profile. Expect bool or int."
     assert net_topology.ndim == 2, f"Incorrect dimension number ({net_topology.ndim}) for network profile. Expect 2."
     assert np.all(np.sum(net_topology > 0,
                          axis=1) >= 2), "Each flow in the network profile should pass through at least 2 nodes."

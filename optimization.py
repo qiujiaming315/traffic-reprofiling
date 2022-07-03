@@ -10,8 +10,8 @@ from lib.genetic_oneSlope import GAOneSlope
 from lib.genetic_twoSlope import GATwoSlopeOuter
 
 """
-Calculate minimum required total bandwidth for a given network (topology+routing)
-using EDF(SCED)/static priority/FIFO scheduler and per-hop traffic (re)shaper.
+Calculate minimum required total bandwidth for a given network (flow path + profile)
+through intelligent traffic reprofiling using SCED schedulers at every hop.
 """
 
 
@@ -26,19 +26,19 @@ def main(opts):
     weight = load_weight(opts.objective, opts.weight, route.shape[1])
     rp_solution = net_parser.rate_proportional(route, flow_profile, opts.objective, weight)
     ns_solution = net_parser.no_shaping(route, flow_profile, opts.objective, weight)
-    result, best_solution = dict(rp=rp_solution, ns=ns_solution), None
+    result = dict(route=route, rp=rp_solution, ns=ns_solution)
     # Determine the execution mode.
     mode = check_mode(opts.fast)
     if mode == 2:
-        best_solution = net_parser.greedy(route, flow_profile, opts.objective, weight, 10)
+        best_solution, best_shaping, best_ddl = net_parser.greedy(route, flow_profile, opts.objective, weight, 10)
     else:
         fast = mode == 1
         # Run genetic algorithm to find a good ordering of flow.
         genetic = GATwoSlopeOuter(route, flow_profile, opts.objective, weight, fast) if opts.two_slope else GAOneSlope(
             route, flow_profile, opts.objective, weight)
         best_solution, best_var, best_order, opt_list = genetic.evolve()
-        for key, value in zip(["var", "opt_list"], [best_var, opt_list]):
-            result[key] = value
+        best_shaping, best_ddl, _ = net_parser.parse_solution(route, best_var)
+        result["opt_list"] = opt_list
         # Uncomment the following code snippet if you want to perform sanity check on the solution.
         # check = net_parser.check_solution(route, flow_profile, best_var, opts.two_slope)
         # if check:
@@ -48,7 +48,7 @@ def main(opts):
     print(f"Rate-proportional solution: {rp_solution:.2f}.")
     print(f"No reshaping solution: {ns_solution:.2f}.")
     print(f"Algorithm execution time: {end - start:.1f}s")
-    for key, value in zip(["solution", "time"], [best_solution, end - start]):
+    for key, value in zip(["solution", "shaping", "ddl", "time"], [best_solution, best_shaping, best_ddl, end - start]):
         result[key] = value
 
     net_idx = re.match(r"net(\d+)\.npy", opts.net.split('/')[-1]).group(1)
@@ -68,7 +68,7 @@ def getargs():
 
     args = argparse.ArgumentParser()
     args.add_argument('net', help="Path to the input npy file describing network topology and flow routes.")
-    args.add_argument('flow', help="Path to the input npy file describing flow profiles.")
+    args.add_argument('flow', help="Path to the input npz file describing flow profiles.")
     args.add_argument('out', help="Directory to save results.")
     args.add_argument('--objective', type=int, default=0,
                       help="Type of objective function to minimize. 0 for total link bandwidth, " +

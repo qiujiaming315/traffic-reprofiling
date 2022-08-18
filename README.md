@@ -61,7 +61,7 @@ The main script for running the minimization algorithm is `optimization.py`. Run
 - `--weight`: path to the link weights if the objective function is selected to be a weighted sum of link bandwidth.
 - `--mode`: bandwidth minimization algorithm to run, 0 for NLP-based algorithm, 1 for the greedy algorithm. Greedy algorithm is applied by default.
 
-For example, to compute the minimum required sum of link bandwidth using the greedy algorithm with network profile saved in `input/network/3/net1.npy`, flow profile saved in `input/flow/3/flow1.npz`, and save the results to `output/`, you should use
+For example, to compute the minimum required sum of link bandwidth using the greedy algorithm with network profile saved in `input/network/3/net1.npy` and flow profile saved in `input/flow/3/flow1.npz`, and save the results to `output/`, you should use
 
 ```
 # Make sure you are in the root directory of this repo,

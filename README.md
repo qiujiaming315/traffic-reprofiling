@@ -37,14 +37,14 @@ The main script for running the minimization algorithm is `optimization.py`. Run
 - `net`: path to the input network profile.
 - `flow`: path to the input flow profile.
 - `out`: directory to save the output file.
-- `--objective`: type of the objective function.
+- `--objective`: type of the objective function to minimize. Available choices include: 0 for the sum of link bandwidth, 1 for weighted sum of link bandwidth, 2 for maximum link bandwidth
 - `--weight`: path to the link weights if the objective function is selected to be a weighted sum of link bandwidth.
-- `--mode`: whether to run the greedy algorithm or the NLP-based algorithm.
+- `--mode`: whether to run the or the NLP-based algorithm (0) or the greedy algorithm (1). Greedy algorithm is applied by default.
 
 ### Library
 
 We factor various parts of the code into different modules in the `lib/`
-directory. You can begin by looking at the main training script to see how
+directory. You can begin by looking at the main optimization script to see how
 to make use of these modules.
 
 - `utils.py`: Implement various utility functions (*e.g.,* function to load input data).

@@ -6,12 +6,12 @@ import numpy as np
 def load_net(net_path, flow_path):
     """
     Load data and do sanity check.
-    :param net_path: location of network profile (topology and flow routes).
-    :param flow_path: location of flow profile.
+    :param net_path: path to the network profile (topology and flow routes).
+    :param flow_path: path to the flow profile.
     :return: the loaded data.
     """
     net_topology, flow_data = np.load(net_path), np.load(flow_path)
-    flow_profile, flow_hop = flow_data['flow'], flow_data['per_hop']
+    flow_profile, per_hop = flow_data['flow'], flow_data['per_hop']
     net_type = net_topology.dtype
     assert net_type is np.dtype(bool) or np.issubdtype(net_type, np.integer), f"Incorrect data type ({net_type}) " + \
                                                                               "for network profile. Expect bool or int."
@@ -30,14 +30,14 @@ def load_net(net_path, flow_path):
     assert np.all(flow_profile >= 0), "All the values in flow profile should be non-negative."
     assert net_topology.shape[0] == flow_profile.shape[
         0], "Inconsistent flow number in network and flow profile detected."
-    return net_topology, (flow_profile, flow_hop)
+    return net_topology, (flow_profile, per_hop)
 
 
 def load_weight(objective, weight_path, num_link):
     """
     Load bandwidth weight and do sanity check.
     :param objective: the objective function.
-    :param weight_path: location of weight profile.
+    :param weight_path: path to the weight profile.
     :param num_link: number of link in the network.
     :return: the loaded weight.
     """
@@ -58,8 +58,7 @@ def check_mode(mode):
     Check the execution mode.
     :param mode: the execution mode.
     """
-    assert any([mode == m for m in [0, 1, 2]]), "Execution mode (--fast) must be one of 0 (accurate mode)" + \
-                                                ", 1 (fast mode), or 2 (greedy mode)."
+    assert any([mode == m for m in [0, 1]]), "Execution mode (--mode) must be either 0 (accurate) or 1 (greedy)."
     return mode
 
 

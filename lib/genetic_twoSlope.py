@@ -1,12 +1,11 @@
-import numpy as np
 from dataclasses import dataclass
 
 from lib.genetic import GeneticAlgorithm
 from lib.utils import add_set
-from lib.order_generator import enum_permutation, get_partial_order, rand_topological_sort, enum_topological_sort
+from lib.order_generator import *
 import lib.octeract as octeract
 
-"""Implementation of genetic algorithm for two-slope service curves (shifted two-slope shapers)."""
+"""Implementation of genetic algorithm for optimizing two-slope rate latency service curves."""
 
 
 @dataclass
@@ -27,13 +26,9 @@ outer_option = OuterOption()
 
 class GATwoSlopeOuter(GeneticAlgorithm):
 
-    def __init__(self, route, flow_profile, objective, weight, fast=False, opts=outer_option):
+    def __init__(self, path_matrix, flow_profile, objective, weight, opts=outer_option):
         self.objective, self.weight = objective, weight
-        self.fast = fast
-        if fast:
-            opts.group_size = 1
-            opts.local_size = 1
-        super().__init__(route, flow_profile, opts)
+        super().__init__(path_matrix, flow_profile, opts)
         self.rp_eval = True
 
     def initiate(self):
@@ -63,9 +58,8 @@ class GATwoSlopeOuter(GeneticAlgorithm):
         # Retrieve ordering from seed if not in enumeration mode.
         if not self.enum:
             order = np.argsort(order)
-        var = GATwoSlopeInner(self.route, self.flow_profile, order, self.objective, self.weight, self.rp_eval,
-                              self.fast)
-        solution, _, _, _ = var.evolve()
+        var = GATwoSlopeInner(self.path_matrix, self.flow_profile, order, self.objective, self.weight, self.rp_eval)
+        solution, _, _ = var.evolve()
         self.rp_eval = False
         update = self.add_opt(solution, var, order)
         return solution, update
@@ -76,7 +70,7 @@ class GATwoSlopeOuter(GeneticAlgorithm):
                 var.opts.max_generation = float('inf')
                 if var.max_explored:
                     var.terminate, var.max_explored = False, False
-                    best_solution, _, _, _ = var.evolve()
+                    best_solution, _, _ = var.evolve()
                     if best_solution < solution:
                         self.opt_solution[idx] = best_solution
         return
@@ -134,13 +128,13 @@ class GATwoSlopeOuter(GeneticAlgorithm):
 
     def get_rp_order(self):
         """
-        Helper function to generate an shaping delay ordering that covers the rate-proportional solution.
+        Helper function to generate an reprofiling delay ordering that covers the rate-proportional solution.
         :return: the generated ordering.
         """
-        max_shaping = np.concatenate((self.flow_profile[:, 2][np.newaxis, :],
-                                      self.flow_profile[:, 1][np.newaxis, :] / self.flow_profile[:, 0][np.newaxis, :]),
-                                     axis=0)
-        rp_order = np.argsort(np.amin(max_shaping, axis=0))
+        max_reprofiling = np.concatenate((self.flow_profile[:, 2][np.newaxis, :],
+                                          self.flow_profile[:, 1][np.newaxis, :] / self.flow_profile[:, 0][np.newaxis,
+                                                                                   :]), axis=0)
+        rp_order = np.argsort(np.amin(max_reprofiling, axis=0))
         return rp_order
 
 
@@ -163,19 +157,14 @@ inner_option = InnerOption()
 
 class GATwoSlopeInner(GeneticAlgorithm):
 
-    def __init__(self, route, flow_profile, shaping_order, objective, weight, rp=False, fast=False,
-                 opts=inner_option):
-        self.local_order = [None] * route.shape[1]
-        self.shaping_order, self.shaping_dict = shaping_order, dict()
-        for i, flow_idx in enumerate(shaping_order):
-            self.shaping_dict[flow_idx] = i
+    def __init__(self, path_matrix, flow_profile, reprofiling_order, objective, weight, rp=False, opts=inner_option):
+        self.local_order = [None] * path_matrix.shape[1]
+        self.reprofiling_order, self.reprofiling_dict = reprofiling_order, dict()
+        for i, flow_idx in enumerate(reprofiling_order):
+            self.reprofiling_dict[flow_idx] = i
         self.rp = rp
-        self.fast = fast
-        if fast:
-            opts.group_size = 1
-            opts.local_size = 1
-        super().__init__(route, flow_profile, opts)
-        self.solver = octeract.formulate(route, flow_profile, objective, weight, True)
+        super().__init__(path_matrix, flow_profile, opts)
+        self.solver = octeract.formulate(path_matrix, flow_profile, objective, weight)
         return
 
     def initiate(self):
@@ -229,7 +218,7 @@ class GATwoSlopeInner(GeneticAlgorithm):
         # TODO: Check if different hops have the same set (number) of flows to simplify computation.
         exact_total = True
         for link_idx in range(self.num_link):
-            link_flow = np.arange(self.num_flow)[self.route[:, link_idx]]
+            link_flow = np.arange(self.num_flow)[self.path_matrix[:, link_idx]]
             order_list = list()
             if np.sum(np.log(np.arange(len(link_flow)) + 1)) <= np.log(self.opts.link_thresh):
                 for flow_order in enum_permutation(link_flow):
@@ -266,7 +255,7 @@ class GATwoSlopeInner(GeneticAlgorithm):
         return
 
     def set_mask(self):
-        cut = np.cumsum(2 * np.sum(self.route, axis=0))
+        cut = np.cumsum(2 * np.sum(self.path_matrix, axis=0))
         mask = np.zeros((cut[-1],), dtype=int)
         mask[cut[:-1]] = 1
         self.mask = np.cumsum(mask)
@@ -309,7 +298,7 @@ class GATwoSlopeInner(GeneticAlgorithm):
         :param flow_order: the order of the flow local deadline at one hop.
         :return: a list of partial orders.
         """
-        partial_order = get_partial_order(self.shaping_dict, flow_order)
+        partial_order = get_partial_order(self.reprofiling_dict, flow_order)
         partial_order = [((f1, 2), (f2, 2)) for (f1, f2) in partial_order]
         partial_order.extend(
             [((flow_order[x], 1), (flow_order[x + 1], 1)) for x in range(len(flow_order) - 1)])
@@ -323,7 +312,7 @@ class GATwoSlopeInner(GeneticAlgorithm):
         """
         rp_order = np.zeros_like(self.mask)
         for link_idx in range(self.num_link):
-            link_flow = self.shaping_order[self.route[:, link_idx][self.shaping_order]]
+            link_flow = self.reprofiling_order[self.path_matrix[:, link_idx][self.reprofiling_order]]
             rand_order = np.random.permutation(link_flow)
             rand_order = np.concatenate((rand_order, link_flow))
             rp_order[self.mask == link_idx] = rand_order
@@ -338,7 +327,7 @@ class GATwoSlopeInner(GeneticAlgorithm):
         num_order = len(self.local_order[link_idx])
         if num_order:
             return self.local_order[link_idx][np.random.randint(num_order)]
-        link_flow = np.arange(self.num_flow)[self.route[:, link_idx]]
+        link_flow = np.arange(self.num_flow)[self.path_matrix[:, link_idx]]
         rand_order = np.random.permutation(link_flow)
         partial_order = self.set_partial(rand_order)
         total_order = rand_topological_sort(partial_order)

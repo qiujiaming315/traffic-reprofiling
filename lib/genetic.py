@@ -7,14 +7,13 @@ from lib.utils import newton_method
 
 class GeneticAlgorithm:
 
-    def __init__(self, route, flow_profile, opts):
-        self.route, self.flow_profile, self.opts = route, flow_profile, opts
-        self.num_flow, self.num_link = route.shape
+    def __init__(self, path_matrix, flow_profile, opts):
+        self.path_matrix, self.flow_profile, self.opts = path_matrix, flow_profile, opts
+        self.num_flow, self.num_link = path_matrix.shape
         self.check_opts()
         self.terminate, self.max_explored = False, False
         self.generation, self.stable = 0, 0
         self.group, self.survivor, self.score = None, None, None
-        self.opt_list = list()
         self.total, self.ub, self.enum = 0, 0, False
         self.mask, self.cut = None, None
         self.order_set = set()
@@ -60,7 +59,6 @@ class GeneticAlgorithm:
         # Update states and check if termination condition is satisfied.
         self.generation += 1
         self.stable = 0 if update else self.stable + 1
-        self.opt_list.append(np.amin(self.opt_solution))
         self.terminate, multi_opt = True, False
         if np.amax(self.opt_solution) - np.amin(self.opt_solution) < self.opts.err_tolerance:
             multi_opt = True
@@ -144,7 +142,6 @@ class GeneticAlgorithm:
 
     def check_opts(self):
         """Sanity check on the input options."""
-        # TODO: Implement sanity checks.
         # TODO: Make sure in random sample mode the total number of orderings is no smaller than the group size.
         return
 
@@ -182,7 +179,7 @@ class GeneticAlgorithm:
         best_solution = self.opt_solution[best_idx]
         best_var = self.opt_var[best_idx]
         best_order = self.opt_order[best_idx]
-        return best_solution, best_var, best_order, self.opt_list
+        return best_solution, best_var, best_order
 
     def add_opt(self, solution, var, order):
         """

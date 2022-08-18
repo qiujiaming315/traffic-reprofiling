@@ -3,23 +3,6 @@ from itertools import permutations
 from collections import defaultdict
 
 
-def random_order(route, seed=None):
-    """
-    Generate completely random flow deadline orders at every hop (link).
-    :param route: a 2-D boolean matrix that describes the route of each flow.
-    :param seed: random seed for reproducing result.
-    :return: a matrix describing the order of flow deadlines at each link, whose shape is consistent with route.
-    """
-    order = np.zeros_like(route, dtype=int)
-    rstate = np.random.RandomState(seed)
-    for i in range(order.shape[1]):
-        order[:, i] = rstate.permutation(order.shape[0])
-        if seed is not None:
-            seed *= 3
-            rstate.seed((seed + 5) % 2 ** 32)
-    return order
-
-
 def enum_permutation(array):
     """
     Enumerate all permutations of a given array.
@@ -31,17 +14,17 @@ def enum_permutation(array):
     return np.array(permutation)
 
 
-def get_partial_order(shaping_order, flow_order):
+def get_partial_order(reprofiling_order, flow_order):
     """
     Collect the partial order given the two orderings.
-    :param shaping_order: the order of shaping delays of all the flows.
+    :param reprofiling_order: the order of reprofiling delays of all the flows.
     :param flow_order: the order of flow local deadlines at one hop.
     :return: a list containing all the partial order tuples.
     """
     partial_order = list()
     for i in range(len(flow_order)):
         for j in range(i + 1, len(flow_order)):
-            if shaping_order[flow_order[i]] < shaping_order[flow_order[j]]:
+            if reprofiling_order[flow_order[i]] < reprofiling_order[flow_order[j]]:
                 partial_order.append((flow_order[i], flow_order[j]))
     return partial_order
 

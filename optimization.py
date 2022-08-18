@@ -6,7 +6,6 @@ from pathlib import Path
 
 from lib.utils import load_net, load_weight, check_mode
 import lib.network_parser as net_parser
-from lib.genetic_oneSlope import GAOneSlope
 from lib.genetic_twoSlope import GATwoSlopeOuter
 
 """
@@ -18,48 +17,42 @@ through intelligent traffic reprofiling using SCED schedulers at every hop.
 def main(opts):
     start = time.time()
     # Load the network and flow profile.
+    net_profile, (flow_profile, per_hop) = load_net(opts.net, opts.flow)
     # Parse the input data and compute the minimum bandwidth of baseline solutions.
-    net_profile, (flow_profile, flow_hop) = load_net(opts.net, opts.flow)
-    route = net_parser.parse_link(net_profile)
-    if flow_hop:
-        flow_profile[:, 2] = flow_profile[:, 2] * np.sum(route, axis=1)
-    weight = load_weight(opts.objective, opts.weight, route.shape[1])
-    rp_solution = net_parser.rate_proportional(route, flow_profile, opts.objective, weight)
-    ns_solution = net_parser.no_shaping(route, flow_profile, opts.objective, weight)
-    result = dict(route=route, rp=rp_solution, ns=ns_solution)
+    path_matrix = net_parser.parse_link(net_profile)
+    if per_hop:
+        # Multiply end-to-end deadline by hop count when the loaded deadlines are specified as "per-hop".
+        flow_profile[:, 2] = flow_profile[:, 2] * np.sum(path_matrix, axis=1)
+    weight = load_weight(opts.objective, opts.weight, path_matrix.shape[1])
+    rpps_solution = net_parser.rate_proportional(path_matrix, flow_profile, opts.objective, weight)
+    nr_solution = net_parser.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
+    result = dict(path_matrix=path_matrix, rpps=rpps_solution, nr=nr_solution)
     # Determine the execution mode.
-    mode = check_mode(opts.fast)
-    if mode == 2:
-        best_solution, best_shaping, best_ddl = net_parser.greedy(route, flow_profile, opts.objective, weight, 10)
+    mode = check_mode(opts.mode)
+    if mode == 1:
+        best_solution, best_reprofiling, best_ddl = net_parser.greedy(path_matrix, flow_profile, opts.objective, weight)
     else:
-        fast = mode == 1
-        # Run genetic algorithm to find a good ordering of flow.
-        genetic = GATwoSlopeOuter(route, flow_profile, opts.objective, weight, fast) if opts.two_slope else GAOneSlope(
-            route, flow_profile, opts.objective, weight)
-        best_solution, best_var, best_order, opt_list = genetic.evolve()
-        best_shaping, best_ddl, _ = net_parser.parse_solution(route, best_var)
-        result["opt_list"] = opt_list
+        # Run genetic algorithm to find a good ordering of flow per-hop deadlines.
+        genetic = GATwoSlopeOuter(path_matrix, flow_profile, opts.objective, weight)
+        best_solution, best_var, _ = genetic.evolve()
+        best_reprofiling, best_ddl, _ = net_parser.parse_solution(path_matrix, best_var)
         # Uncomment the following code snippet if you want to perform sanity check on the solution.
-        # check = net_parser.check_solution(route, flow_profile, best_var, opts.two_slope)
+        # check = net_parser.check_solution(path_matrix, flow_profile, best_var)
         # if check:
         #     print("Pass Sanity Check.")
     end = time.time()
-    print(f"Best solution found for EDF: {best_solution:.2f}.")
-    print(f"Rate-proportional solution: {rp_solution:.2f}.")
-    print(f"No reshaping solution: {ns_solution:.2f}.")
+    print(f"Best solution found: {best_solution:.2f}.")
+    print(f"Rate-proportional solution: {rpps_solution:.2f}.")
+    print(f"No reprofiling solution: {nr_solution:.2f}.")
     print(f"Algorithm execution time: {end - start:.1f}s")
-    for key, value in zip(["solution", "shaping", "ddl", "time"], [best_solution, best_shaping, best_ddl, end - start]):
+    for key, value in zip(["solution", "reprofiling_delay", "ddl", "run_time"],
+                          [best_solution, best_reprofiling, best_ddl, end - start]):
         result[key] = value
-
-    net_idx = re.match(r"net(\d+)\.npy", opts.net.split('/')[-1]).group(1)
-    flow_idx = re.match(r"flow(\d+)\.npz", opts.flow.split('/')[-1]).group(1)
-    dir_name = "/two_slope" if opts.two_slope else "/one_slope"
-    dir_name += ["/sum", "/weight", "/max"][opts.objective]
-    if opts.two_slope:
-        dir_name += ["/accurate", "/fast", "/greedy"][opts.fast]
-
-    Path(opts.out + dir_name).mkdir(parents=True, exist_ok=True)
-    np.savez(opts.out + dir_name + f"/{route.shape[0]}_{route.shape[1]}_{net_idx}_{flow_idx}.npz", **result)
+    # Save the results to the specified directory.
+    net_idx = re.match(r"net(\d+)\.npy", opts.net.replace('\\', '/').split('/')[-1]).group(1)
+    flow_idx = re.match(r"flow(\d+)\.npz", opts.flow.replace('\\', '/').split('/')[-1]).group(1)
+    Path(opts.out).mkdir(parents=True, exist_ok=True)
+    np.savez(opts.out + f"/{path_matrix.shape[0]}_{net_idx}_{flow_idx}.npz", **result)
     return
 
 
@@ -76,12 +69,9 @@ def getargs():
     args.add_argument('--weight', type=str, default="",
                       help="Path to the bandwidth weights. Only needed when objective function is weighted " +
                            "total link bandwidth. Weight each link equally by default.")
-    args.add_argument('--two-slope', action='store_true', help="Use one slope (False) or two slope (True) (re)shapers.")
-    args.add_argument('--fast', type=int, default=0,
+    args.add_argument('--mode', type=int, default=1,
                       help="Run in accurate (0, solve multiple non-linear programs and find the best result), " +
-                           "fast (1, solve only one non-linear program guaranteed to be no worse than " +
-                           "rate-proportional), or greedy (2, a greedy algorithm based on heuristic which is " +
-                           "the fastest among all three) mode when two slope (re)shapers are applied.")
+                           "or greedy (1, a heuristic-based greedy algorithm) mode.")
     return args.parse_args()
 
 

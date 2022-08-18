@@ -1,0 +1,9 @@
+# Ignored Folders
+/.idea/
+/backup/
+/input/*/
+/lib/*/
+/output/
+/viz/
+
+# Ignored Files

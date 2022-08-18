@@ -56,6 +56,7 @@ def generate_random_flow(num_flow, seed=None):
 def generate_fb_flow(num_flow, seed=None):
     """
     Generate random flow profiles using distribution reported in the Facebook paper.
+    The paper is available at https://dl.acm.org/doi/10.1145/2785956.2787472.
     :param num_flow: the number of flows in the generated profile.
     :param seed: the seed for random generator.
     :return: a numpy matrix describing the flow profile.
@@ -94,5 +95,15 @@ def save_file(output_path, flow, per_hop=False):
 
 
 if __name__ == "__main__":
+    # First, specify the directory to save the generated flow profiles.
     path = f"./flow/"
-    save_file(path, generate_fb_flow(int(10)))
+    # You can specify your own flow profile and directly save it to the directory.
+    flow = np.array([[15.0, 8.0, 1.0],
+                     [2.0, 4.0, 2.0],
+                     [3.0, 13.0, 5.0]
+                     ])
+    save_file(path, flow)
+    # Alternatively, you may generate and save a random flow profile.
+    save_file(path, generate_random_flow(10))
+    # Or you can generate a flow profile motivated by the Facebook paper.
+    save_file(path, generate_fb_flow(10))

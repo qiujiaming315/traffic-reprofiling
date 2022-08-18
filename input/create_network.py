@@ -92,6 +92,7 @@ def generate_tandem_net(num_hop, num_flow_main, num_hop_cross, num_flow_cross, s
 def generate_google_net(num_pair, seed=None):
     """
     Generate a network profile using the Google (US) network topology.
+    The implementation is motivated by https://cloud.google.com/about/locations#network.
     :param num_pair: the number of S-D pairs in the network profile.
     :param seed: the seed for random generator.
     :return: a numpy matrix describing the routes of the flows (network profile).
@@ -160,5 +161,17 @@ def save_file(output_path, net):
 
 
 if __name__ == "__main__":
+    # First, specify the directory to save the generated network profiles.
     path = "./network/"
+    # You can specify your own network profile and directly save it to the directory.
+    net = np.array([[1, 1, 0],
+                    [1, 1, 1],
+                    [0, 1, 1]
+                    ])
+    save_file(path, net.astype(bool))
+    # Alternatively, you may generate and save a random network profile.
+    save_file(path, generate_random_net(num_flow=3, num_node=5))
+    # You may also choose to generate a tandem network.
+    save_file(path, generate_tandem_net(10, 2, 2, 1))
+    # Or you can generate a network motivated by the Google (US) network topology.
     save_file(path, generate_google_net(10))

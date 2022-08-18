@@ -20,6 +20,8 @@ def save_file(output_path, weight):
 
 
 if __name__ == "__main__":
+    # First, specify the directory to save the generated link weights.
     path = "./weight/"
+    # You should then specify the weight you want to assign on each link and save it to the specified directory.
     wt = np.array([2.0, 1.0, 1.0])
     save_file(path, wt)

@@ -4,12 +4,12 @@
 
 We recommend a recent Python 3.7+ distribution of [Anaconda](https://www.anaconda.com/products/individual). To run the algorithm based on solving non-linear programs (NLPs) you also need to install the community edition of Octeract v3.6.0. We do not have particular operating system requirements, so you should be able to run the scripts either with Linux, Windows, or macOS.
 
-To keep a local copy of our code, clone this repository and navigate into the cloned directory. You should then be ready to run the scripts once you installed all the pre-requisite.
+To keep a local copy of our code, clone this repository and navigate into the cloned directory. You should then be ready to run the scripts once you installed all the pre-requisite packages.
 
 ```
-# First nevigate to the directory where you want to keep a copy of the code.
+# First navigate to the directory where you want to keep a copy of the code.
 git clone https://github.com/qiujiaming315/traffic-pacing.git
-# Nevigate into the cloned directory to get started.
+# Navigate into the cloned directory to get started.
 cd traffic-pacing
 ```
 

@@ -1,5 +1,6 @@
 import numpy as np
 import bisect
+from concurrent.futures import ThreadPoolExecutor as TPE
 
 
 def parse_link(network_profile):
@@ -76,7 +77,7 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     return total_bandwidth
 
 
-def greedy(path_matrix, flow_profile, objective, weight, num_iter=10):
+def greedy(path_matrix, flow_profile, objective, weight, k=1, num_workers=None):
     """
     Use the heuristic-based greedy algorithm to efficiently approximate the optimal solution (guaranteed to be no
     worse than both the rate-proportional solution and the no reprofiling solution).
@@ -84,8 +85,9 @@ def greedy(path_matrix, flow_profile, objective, weight, num_iter=10):
     :param flow_profile: the flow profile.
     :param objective: the objective function.
     :param weight: the bandwidth weight profile.
-    :param num_iter: number of iteration.
-    :return: the improved solution.
+    :param k: number of initial solutions to start with.
+    :param num_workers: number of workers for parallel computing.
+    :return: the best solution found.
     """
     # Compute the rate required by each flow under rate-proportional solution.
     zero_ddl = 1e-5
@@ -98,12 +100,14 @@ def greedy(path_matrix, flow_profile, objective, weight, num_iter=10):
     burst, deadline = flow_profile[:, 1], flow_profile[:, 2]
     # Transform the rates into angles and create evenly split angles to generate different initial solutions.
     flow_arc = np.arctan(flow_rate)
-    flow_arcs = np.linspace(flow_arc, np.pi / 2, num=num_iter + 1)
+    flow_arcs = np.linspace(flow_arc, np.pi / 2, num=k + 1)
+
     # Uncomment to apply random reprofiling delays for initial solution.
     # flow_arcs = np.random.rand(num_iter - 1, num_flow)
     # flow_arcs = flow_arcs * (np.pi / 2 - flow_arc) + flow_arc
     # flow_arcs = np.concatenate((flow_arc[np.newaxis, :], flow_arcs, np.ones((1, num_flow)) * np.pi / 2), axis=0)
-    for arc in flow_arcs:
+
+    def greedy_solution(arc):
         rate = np.tan(arc)
         reprofiling_delay = burst / rate
         # Handle the special case of no reprofiling.
@@ -115,8 +119,14 @@ def greedy(path_matrix, flow_profile, objective, weight, num_iter=10):
         bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
         new_solution, reprofiling_delay, ddl = improve_solution(path_matrix, flow_profile,
                                                                 (reprofiling_delay, ddl, bandwidth), objective, weight)
-        if new_solution < best_solution:
-            best_solution, best_reprofiling, best_ddl = new_solution, reprofiling_delay, ddl
+        return new_solution, reprofiling_delay, ddl
+
+    # Apply the greedy algorithm to improve each initial solution in parallel.
+    with TPE(max_workers=num_workers) as pool:
+        solutions = list(pool.map(greedy_solution, flow_arcs))
+    # Retrieve the best solution.
+    solutions.sort(key=lambda x: x[0])
+    best_solution, best_shaping, best_ddl = solutions[0]
     return best_solution, best_reprofiling, best_ddl
 
 

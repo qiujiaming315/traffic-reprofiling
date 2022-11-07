@@ -72,6 +72,12 @@ def getargs():
     args.add_argument('--mode', type=int, default=1,
                       help="Run in accurate (0, solve multiple non-linear programs and find the best result), " +
                            "or greedy (1, a heuristic-based greedy algorithm) mode.")
+    args.add_argument('--num_workers', type=int, default=0,
+                      help="The number of workers for parallel computing. Currently only available for the greedy" +
+                           "algorithm. If a non-positive value is given, use the all the processors.")
+    args.add_argument('--k', type=int, default=1,
+                      help="Number of initial solutions for the greedy algorithm to start with. The best result is" +
+                           "returned.")
     return args.parse_args()
 
 

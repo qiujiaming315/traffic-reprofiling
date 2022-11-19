@@ -20,14 +20,67 @@ fb_cache_duration = np.array(
       550000, 600000, 600000, 600000]])
 fb_hadoop_duration = np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 5, 300, 3500, 15000, 35000, 100000, 600000]])
 fb_size = np.concatenate((fb_web_size, fb_cache_size, fb_hadoop_size), axis=0)
+fb_size = fb_size / 1000
 fb_duration = np.concatenate((fb_web_duration, fb_cache_duration, fb_hadoop_duration), axis=0)
 fb_duration = fb_duration / 1000
 fb_deadline = np.array([0.01, 0.05, 0.2])
 fb_ratio = np.array([3, 9, 1])
-fb_burst = np.array([0.15, 0.4, 0.3])
+fb_burst = np.array([0.15, 0.4, 0.3]) / 1000
 fb_burst_scale = np.array([5, 10, 1])
 fb_burst = fb_burst * fb_burst_scale
 fb_ratio = fb_ratio / np.sum(fb_ratio)
+
+chameleon_ia_rate1 = np.array([[300, 550]])
+chameleon_ia_rate2 = np.array([[150, 550]])
+chameleon_ia_rate3 = np.array([[100, 500]])
+chameleon_ia_rate4 = np.array([[1, 100]])
+chameleon_ia_rate = np.concatenate((chameleon_ia_rate1, chameleon_ia_rate2, chameleon_ia_rate3, chameleon_ia_rate4),
+                                   axis=0) / 1000
+chameleon_ia_burst1 = np.array([[100, 400]])
+chameleon_ia_burst2 = np.array([[100, 400]])
+chameleon_ia_burst3 = np.array([[100, 400]])
+chameleon_ia_burst4 = np.array([[80, 120]])
+chameleon_ia_burst = np.concatenate(
+    (chameleon_ia_burst1, chameleon_ia_burst2, chameleon_ia_burst3, chameleon_ia_burst4),
+    axis=0) / 1e6
+chameleon_ia_deadline1 = np.array([[80, 120]])
+chameleon_ia_deadline2 = np.array([[150, 200]])
+chameleon_ia_deadline3 = np.array([[10, 20]])
+chameleon_ia_deadline4 = np.array([[10, 20]])
+chameleon_ia_deadline = np.concatenate(
+    (chameleon_ia_deadline1, chameleon_ia_deadline2, chameleon_ia_deadline3, chameleon_ia_deadline4),
+    axis=0) / 1000
+chameleon_cs_rate = np.array([[1, 220]]) / 1000
+chameleon_cs_burst = np.array([[80, 300]]) / 1e6
+chameleon_cs_deadline = np.array([[2, 4]]) / 1000
+chameleon_cps_rate1 = np.array([[2, 4]])
+chameleon_cps_rate2 = np.array([[5, 8]])
+chameleon_cps_rate3 = np.array([[2, 4]])
+chameleon_cps_rate = np.concatenate((chameleon_cps_rate1, chameleon_cps_rate2, chameleon_cps_rate3), axis=0)
+chameleon_cps_burst1 = np.array([[80, 140]])
+chameleon_cps_burst2 = np.array([[1000, 3000]])
+chameleon_cps_burst3 = np.array([[80, 120]])
+chameleon_cps_burst = np.concatenate((chameleon_cps_burst1, chameleon_cps_burst2, chameleon_cps_burst3), axis=0) / 1e6
+chameleon_cps_deadline1 = np.array([[50, 200]])
+chameleon_cps_deadline2 = np.array([[50, 200]])
+chameleon_cps_deadline3 = np.array([[50, 200]])
+chameleon_cps_deadline = np.concatenate((chameleon_cps_deadline1, chameleon_cps_deadline2, chameleon_cps_deadline3),
+                                        axis=0) / 1000
+chameleon_bh_rate1 = np.array([[100, 150]])
+chameleon_bh_rate2 = np.array([[100, 200]])
+chameleon_bh_rate3 = np.array([[80, 200]])
+chameleon_bh_rate = np.concatenate((chameleon_bh_rate1, chameleon_bh_rate2, chameleon_bh_rate3), axis=0)
+chameleon_bh_burst1 = np.array([[1000, 5000]])
+chameleon_bh_burst2 = np.array([[1000, 3000]])
+chameleon_bh_burst3 = np.array([[1000, 3000]])
+chameleon_bh_burst = np.concatenate((chameleon_bh_burst1, chameleon_bh_burst2, chameleon_bh_burst3), axis=0) / 1e6
+chameleon_bh_deadline1 = np.array([[10, 100]])
+chameleon_bh_deadline2 = np.array([[10, 100]])
+chameleon_bh_deadline3 = np.array([[50, 100]])
+chameleon_bh_deadline = np.concatenate((chameleon_bh_deadline1, chameleon_bh_deadline2, chameleon_bh_deadline3),
+                                       axis=0) / 1000
+chameleon_ratio = np.array([33, 33, 33, 1])
+chameleon_ratio = chameleon_ratio / np.sum(chameleon_ratio)
 
 
 def generate_random_flow(num_flow, seed=None):
@@ -79,6 +132,44 @@ def generate_fb_flow(num_flow, seed=None):
     return flow
 
 
+def generate_chameleon_flow(num_flow, seed=None):
+    """
+    Generate random flow profiles using distribution reported in the Chameleon paper.
+    The paper is available at https://dl.acm.org/doi/10.1145/3386367.3432879.
+    :param num_flow: the number of flows in the generated profile.
+    :param seed: the seed for random generator.
+    :return: a numpy matrix describing the flow profile.
+    """
+    flow = np.zeros((num_flow, 3))
+    rstate = np.random.RandomState(seed)
+    application_rate = [chameleon_ia_rate, chameleon_cs_rate, chameleon_cps_rate, chameleon_bh_rate]
+    application_burst = [chameleon_ia_burst, chameleon_cs_burst, chameleon_cps_burst, chameleon_bh_burst]
+    application_deadline = [chameleon_ia_deadline, chameleon_cs_deadline, chameleon_cps_deadline, chameleon_bh_deadline]
+    # Sanity check on the parameters:
+    for r, b, d in zip(application_rate, application_burst, application_deadline):
+        assert len(r) == len(b) and len(b) == len(d)
+    # Sample application category according to the sampling ratio.
+    application_mask = rstate.choice(len(chameleon_ratio), num_flow, p=chameleon_ratio)
+    # Sample flow profiles for each application category.
+    for app_category_idx in range(len(chameleon_ratio)):
+        num_app = np.sum(application_mask == app_category_idx)
+        app_data = np.zeros((num_app, 3))
+        # Sample applications from the specified category.
+        app_mask = rstate.choice(len(application_rate[app_category_idx]), num_app)
+        for app_idx in range(len(application_rate[app_category_idx])):
+            # Set the rate, burst and deadline
+            num_sample = np.sum(app_mask == app_idx)
+            app_rate = application_rate[app_category_idx][app_idx]
+            app_burst = application_burst[app_category_idx][app_idx]
+            app_deadline = application_deadline[app_category_idx][app_idx]
+            rand_data = rstate.rand(num_sample, 3)
+            app_data[app_mask == app_idx, 0] = rand_data[:, 0] * (app_rate[1] - app_rate[0]) + app_rate[0]
+            app_data[app_mask == app_idx, 1] = rand_data[:, 1] * (app_burst[1] - app_burst[0]) + app_burst[0]
+            app_data[app_mask == app_idx, 2] = rand_data[:, 2] * (app_deadline[1] - app_deadline[0]) + app_deadline[0]
+        flow[application_mask == app_category_idx] = app_data
+    return flow
+
+
 def save_file(output_path, flow, per_hop=False):
     """
     Save the generated flow profile to the specified output location.
@@ -97,6 +188,8 @@ def save_file(output_path, flow, per_hop=False):
 if __name__ == "__main__":
     # First, specify the directory to save the generated flow profiles.
     path = f"./flow/"
+    # path = f"./flow/fat_tree/k4/"
+    # path1 = f"./network/practical/fat_tree/k4/"
     # You can specify your own flow profile and directly save it to the directory.
     flow = np.array([[15.0, 8.0, 1.0],
                      [2.0, 4.0, 2.0],
@@ -107,3 +200,10 @@ if __name__ == "__main__":
     save_file(path, generate_random_flow(10))
     # Or you can generate a flow profile motivated by the Facebook paper.
     save_file(path, generate_fb_flow(10))
+    # Or you can generate a flow profile motivated by the Chameleon paper.
+    save_file(path, generate_chameleon_flow(10))
+    # for num_sd in range(10, 251, 10):
+    #     num_flows = os.listdir(path1 + f"{num_sd}/")
+    #     for num_flow in num_flows:
+    #         for _ in range(50):
+    #             save_file(path + f"{num_sd}/", generate_chameleon_flow(int(num_flow)))

@@ -79,7 +79,7 @@ chameleon_bh_deadline2 = np.array([[10, 100]])
 chameleon_bh_deadline3 = np.array([[50, 100]])
 chameleon_bh_deadline = np.concatenate((chameleon_bh_deadline1, chameleon_bh_deadline2, chameleon_bh_deadline3),
                                        axis=0) / 1000
-chameleon_ratio = np.array([33, 33, 33, 1])
+chameleon_ratio = np.array([2, 5, 2, 1])
 chameleon_ratio = chameleon_ratio / np.sum(chameleon_ratio)
 
 
@@ -188,8 +188,6 @@ def save_file(output_path, flow, per_hop=False):
 if __name__ == "__main__":
     # First, specify the directory to save the generated flow profiles.
     path = f"./flow/"
-    # path = f"./flow/fat_tree/k4/"
-    # path1 = f"./network/practical/fat_tree/k4/"
     # You can specify your own flow profile and directly save it to the directory.
     flow = np.array([[15.0, 8.0, 1.0],
                      [2.0, 4.0, 2.0],
@@ -202,8 +200,3 @@ if __name__ == "__main__":
     save_file(path, generate_fb_flow(10))
     # Or you can generate a flow profile motivated by the Chameleon paper.
     save_file(path, generate_chameleon_flow(10))
-    # for num_sd in range(10, 251, 10):
-    #     num_flows = os.listdir(path1 + f"{num_sd}/")
-    #     for num_flow in num_flows:
-    #         for _ in range(50):
-    #             save_file(path + f"{num_sd}/", generate_chameleon_flow(int(num_flow)))

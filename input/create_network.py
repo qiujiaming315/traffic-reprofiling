@@ -234,7 +234,6 @@ def save_file(output_path, net):
 if __name__ == "__main__":
     # First, specify the directory to save the generated network profiles.
     path = "./network/"
-    # path = "./network/practical/fat_tree/k4/"
     # You can specify your own network profile and directly save it to the directory.
     net = np.array([[1, 1, 0],
                     [1, 1, 1],
@@ -248,6 +247,3 @@ if __name__ == "__main__":
     # Or you can generate a network motivated by some realistic network topology.
     save_file(path, generate_google_net(10))
     save_file(path, generate_chameleon_net(10))
-    # for num_sd in range(10, 251, 10):
-    #     for _ in range(20):
-    #         save_file(path + f"{num_sd}/", generate_chameleon_net(num_sd))

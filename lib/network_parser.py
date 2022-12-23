@@ -71,7 +71,7 @@ def full_reprofiling(path_matrix, flow_profile, objective, weight):
     """
     num_flow, num_link = path_matrix.shape
     reprofiling_delay = np.concatenate(
-        (path_matrix[:, 2][np.newaxis, :], path_matrix[:, 1][np.newaxis, :] / path_matrix[:, 0][np.newaxis, :]),
+        (flow_profile[:, 2][np.newaxis, :], flow_profile[:, 1][np.newaxis, :] / flow_profile[:, 0][np.newaxis, :]),
         axis=0)
     reprofiling_delay = np.amin(reprofiling_delay, axis=0)
     ddl = ((flow_profile[:, 2] - reprofiling_delay) / np.sum(path_matrix, axis=1))[:, np.newaxis] * np.ones((num_link,))
@@ -99,7 +99,7 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     return total_bandwidth
 
 
-def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_workers=None):
+def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_workers=None, min_improvement=0.001):
     """
     Use importance sampling + greedy algorithm to efficiently approximate the optimal solution (guaranteed to be no
     worse than both the full reprofiling solution and the no reprofiling solution).
@@ -111,6 +111,7 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
         in each iteration.
     :param num_iter: number of iterations to refine the importance region.
     :param num_workers: number of workers for parallel computing.
+    :param min_improvement: minimum improvement to terminate iteration.
     :return: the best solution found and its corresponding reprofiling ratio.
     """
     # Make sure that the importance sampling parameters are valid.
@@ -122,9 +123,12 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
     best_solution, best_reprofiling, best_ddl, best_ratio = np.inf, None, None, None
     # Specify the two extremes of the importance region.
     low_ratio, high_ratio = 0, 1
-    for _ in range(num_iter):
+    for iter_idx in range(num_iter):
         # Uniformly sample a range of reprofiling ratios between the two extremes.
         reprofiling_ratios = np.linspace(low_ratio, high_ratio, num=k + 2)
+        # Remove the two extremes (because they were explored) if it's not the first iteration.
+        if iter_idx > 0:
+            reprofiling_ratios = reprofiling_ratios[1:-1]
         # Apply the greedy algorithm to improve each initial solution in parallel.
         with TPE(max_workers=num_workers) as pool:
             solutions = list(
@@ -133,12 +137,16 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
         # Retrieve the best solution in the current iteration.
         solution_sort = sorted(range(len(solutions)), key=lambda x: solutions[x][0])
         best_idx = solution_sort[0]
+        improvement = (best_solution - solutions[best_idx][0]) / best_solution
         # Update the best solution and the two extremes of the importance region.
         if solutions[best_idx][0] < best_solution:
             best_solution, best_reprofiling, best_ddl = solutions[best_idx]
             best_ratio = reprofiling_ratios[best_idx]
         low_ratio = reprofiling_ratios[max(0, best_idx - 1)]
         high_ratio = reprofiling_ratios[min(k + 1, best_idx + 1)]
+        # Terminate the iteration if the improvement is small enough.
+        if improvement < min_improvement:
+            break
     return best_solution, best_reprofiling, best_ddl, best_ratio
 
 

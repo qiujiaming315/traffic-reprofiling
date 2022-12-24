@@ -1,17 +1,21 @@
+from collections import defaultdict
 import numpy as np
 
 """Utility functions."""
 
 
-def load_net(net_path, flow_path):
+def load_net(net_path, flow_path, aggregate=False):
     """
     Load data and do sanity check.
     :param net_path: path to the network profile (topology and flow routes).
     :param flow_path: path to the flow profile.
+    :param aggregate: whether the flows with same route and deadline class should be aggregated.
     :return: the loaded data.
     """
     net_topology, flow_data = np.load(net_path), np.load(flow_path)
     flow_profile, per_hop = flow_data['flow'], flow_data['per_hop']
+    if aggregate:
+        net_topology, flow_profile = aggregate_flow(net_topology, flow_profile)
     net_type = net_topology.dtype
     assert net_type is np.dtype(bool) or np.issubdtype(net_type, np.integer), f"Incorrect data type ({net_type}) " + \
                                                                               "for network profile. Expect bool or int."
@@ -31,6 +35,40 @@ def load_net(net_path, flow_path):
     assert net_topology.shape[0] == flow_profile.shape[
         0], "Inconsistent flow number in network and flow profile detected."
     return net_topology, (flow_profile, per_hop)
+
+
+def aggregate_flow(net_topology, flow_profile):
+    """
+    Aggregate flows with the same route and deadline class.
+    :param net_topology: the route taken by each flow.
+    :param flow_profile: the profile of each flow.
+    :return: the aggregated flows.
+    """
+    # Declare variables to keep the aggregated flow routes and profiles.
+    net_agg = np.zeros((0, net_topology.shape[1]), net_topology.dtype)
+    flow_agg = np.zeros((0, flow_profile.shape[1]), flow_profile.dtype)
+    # Find all the flows with the same route.
+    net_route = defaultdict(list)
+    for idx, route in enumerate(net_topology):
+        net_route[tuple(route)].append(idx)
+    for route in net_route:
+        route_mask = np.zeros((net_topology.shape[0],), dtype=bool)
+        route_mask[net_route[route]] = True
+        net_route[route] = route_mask
+    # Find all flows with the same route and deadline class.
+    ddl_class = np.unique(flow_profile[:, 2])
+    for route in net_route:
+        for ddl in ddl_class:
+            route_mask = net_route[route]
+            ddl_mask = flow_profile[:, 2] == ddl
+            route_ddl_mask = np.logical_and(route_mask, ddl_mask)
+            # Aggregate the flows.
+            ddl_flow = flow_profile[route_ddl_mask]
+            ddl_flow = np.sum(ddl_flow, axis=0, keepdims=True)
+            ddl_flow[:, 2] = ddl
+            net_agg = np.concatenate((net_agg, np.array([route])), axis=0)
+            flow_agg = np.concatenate((flow_agg, ddl_flow), axis=0)
+    return net_agg, flow_agg
 
 
 def load_weight(objective, weight_path, num_link):

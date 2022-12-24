@@ -17,7 +17,7 @@ through intelligent traffic reprofiling using SCED schedulers at every hop.
 def main(opts):
     start = time.time()
     # Load the network and flow profile.
-    net_profile, (flow_profile, per_hop) = load_net(opts.net, opts.flow)
+    net_profile, (flow_profile, per_hop) = load_net(opts.net, opts.flow, opts.aggregate)
     # Parse the input data and compute the minimum bandwidth of baseline solutions.
     path_matrix = net_parser.parse_link(net_profile)
     if per_hop:
@@ -77,6 +77,8 @@ def getargs():
     args.add_argument('--mode', type=int, default=1,
                       help="Run in accurate (0, solve multiple non-linear programs and find the best result), " +
                            "or greedy (1, a heuristic-based greedy algorithm) mode.")
+    args.add_argument('--aggregate', action="store_true",
+                      help="Whether flows with same route and deadline class should be aggregated.")
     args.add_argument('--num_workers', type=int, default=0,
                       help="The number of workers for parallel computing. Currently only available for the greedy" +
                            "algorithm. If a non-positive value is given, use the all the processors.")

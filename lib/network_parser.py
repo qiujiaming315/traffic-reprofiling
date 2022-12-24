@@ -143,7 +143,7 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
             best_solution, best_reprofiling, best_ddl = solutions[best_idx]
             best_ratio = reprofiling_ratios[best_idx]
         low_ratio = reprofiling_ratios[max(0, best_idx - 1)]
-        high_ratio = reprofiling_ratios[min(k + 1, best_idx + 1)]
+        high_ratio = reprofiling_ratios[min(len(reprofiling_ratios) - 1, best_idx + 1)]
         # Terminate the iteration if the improvement is small enough.
         if improvement < min_improvement:
             break

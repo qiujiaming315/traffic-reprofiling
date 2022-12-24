@@ -63,11 +63,12 @@ def aggregate_flow(net_topology, flow_profile):
             ddl_mask = flow_profile[:, 2] == ddl
             route_ddl_mask = np.logical_and(route_mask, ddl_mask)
             # Aggregate the flows.
-            ddl_flow = flow_profile[route_ddl_mask]
-            ddl_flow = np.sum(ddl_flow, axis=0, keepdims=True)
-            ddl_flow[:, 2] = ddl
-            net_agg = np.concatenate((net_agg, np.array([route])), axis=0)
-            flow_agg = np.concatenate((flow_agg, ddl_flow), axis=0)
+            if np.sum(route_ddl_mask) > 0:
+                ddl_flow = flow_profile[route_ddl_mask]
+                ddl_flow = np.sum(ddl_flow, axis=0, keepdims=True)
+                ddl_flow[:, 2] = ddl
+                net_agg = np.concatenate((net_agg, np.array([route])), axis=0)
+                flow_agg = np.concatenate((flow_agg, ddl_flow), axis=0)
     return net_agg, flow_agg
 
 

@@ -137,7 +137,7 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
         # Retrieve the best solution in the current iteration.
         solution_sort = sorted(range(len(solutions)), key=lambda x: solutions[x][0])
         best_idx = solution_sort[0]
-        improvement = (best_solution - solutions[best_idx][0]) / best_solution
+        improvement = (best_solution - solutions[best_idx][0]) / best_solution if iter_idx > 0 else np.inf
         # Update the best solution and the two extremes of the importance region.
         if solutions[best_idx][0] < best_solution:
             best_solution, best_reprofiling, best_ddl = solutions[best_idx]

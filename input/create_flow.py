@@ -207,7 +207,7 @@ def generate_tsn_flow(num_flow, periodic=True, seed=None):
         flow_data[:, 1] = tsn_frame_size[class_idx]
         if not periodic:
             flow_data[:, 0] *= 1.1
-            # TODO: Compute the burst size with Poisson arrival.
+            flow_data[:, 1] *= 25
         flow_data[:, 2] = tsn_deadline[class_idx]
         flow[class_mask == class_idx] = flow_data
     return flow

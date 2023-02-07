@@ -82,6 +82,16 @@ chameleon_bh_deadline = np.concatenate((chameleon_bh_deadline1, chameleon_bh_dea
 chameleon_ratio = np.array([2, 5, 2, 1])
 chameleon_ratio = chameleon_ratio / np.sum(chameleon_ratio)
 
+tsn_cdt_interval = np.array([0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512])
+tsn_a_interval = np.array([0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512])
+tsn_b_interval = np.array([0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512])
+tsn_interval = [tsn_cdt_interval, tsn_a_interval, tsn_b_interval]
+tsn_interval = [class_interval / 1000 for class_interval in tsn_interval]
+tsn_frame_size = np.array([128, 256, 256]) / 1e6
+tsn_deadline = np.array([0.1, 2, 50]) / 1000
+tsn_ratio = np.array([1, 4, 4])
+tsn_ratio = tsn_ratio / np.sum(tsn_ratio)
+
 
 def generate_random_flow(num_flow, seed=None):
     """
@@ -157,7 +167,7 @@ def generate_chameleon_flow(num_flow, seed=None):
         # Sample applications from the specified category.
         app_mask = rstate.choice(len(application_rate[app_category_idx]), num_app)
         for app_idx in range(len(application_rate[app_category_idx])):
-            # Set the rate, burst and deadline
+            # Set the rate, burst and deadline.
             num_sample = np.sum(app_mask == app_idx)
             app_rate = application_rate[app_category_idx][app_idx]
             app_burst = application_burst[app_category_idx][app_idx]
@@ -167,6 +177,39 @@ def generate_chameleon_flow(num_flow, seed=None):
             app_data[app_mask == app_idx, 1] = rand_data[:, 1] * (app_burst[1] - app_burst[0]) + app_burst[0]
             app_data[app_mask == app_idx, 2] = rand_data[:, 2] * (app_deadline[1] - app_deadline[0]) + app_deadline[0]
         flow[application_mask == app_category_idx] = app_data
+    return flow
+
+
+def generate_tsn_flow(num_flow, periodic=True, seed=None):
+    """
+    Generate random flow profiles for TSN applications.
+    Motivated by the following papers:
+    https://ieeexplore.ieee.org/abstract/document/7092358/.
+    https://ieeexplore.ieee.org/abstract/document/8700610/.
+    https://ieeexplore.ieee.org/abstract/document/7385584/.
+    :param num_flow: the number of flows in the generated profile.
+    :param periodic: whether the arrival process is periodic with jitter or Poisson.
+    :param seed: the seed for random generator.
+    :return: a numpy matrix describing the flow profile.
+    """
+    flow = np.zeros((num_flow, 3))
+    rstate = np.random.RandomState(seed)
+    # Sample traffic class according to the sampling ratio.
+    class_mask = rstate.choice(len(tsn_ratio), num_flow, p=tsn_ratio)
+    # Sample flow profiles for each traffic class.
+    for class_idx in range(len(tsn_ratio)):
+        num_flow = np.sum(class_mask == class_idx)
+        flow_data = np.zeros((num_flow, 3))
+        # Sample arrival interval from the specified traffic class.
+        interval_mask = rstate.choice(len(tsn_interval[class_idx]), num_flow)
+        # Set the rate, burst and deadline.
+        flow_data[:, 0] = tsn_frame_size[class_idx] / tsn_interval[class_idx][interval_mask]
+        flow_data[:, 1] = tsn_frame_size[class_idx]
+        if not periodic:
+            flow_data[:, 0] *= 1.1
+            # TODO: Compute the burst size with Poisson arrival.
+        flow_data[:, 2] = tsn_deadline[class_idx]
+        flow[class_mask == class_idx] = flow_data
     return flow
 
 
@@ -196,7 +239,9 @@ if __name__ == "__main__":
     save_file(path, flow)
     # Alternatively, you may generate and save a random flow profile.
     save_file(path, generate_random_flow(10))
-    # Or you can generate a flow profile motivated by the Facebook paper.
+    # Or you can generate a flow profile motivated by the Facebook paper (for inter-datacenter network).
     save_file(path, generate_fb_flow(10))
-    # Or you can generate a flow profile motivated by the Chameleon paper.
+    # Or you can generate a flow profile motivated by the Chameleon paper (for intra-datacenter network).
     save_file(path, generate_chameleon_flow(10))
+    # Or you can generate a flow profile for TSN network.
+    save_file(path, generate_tsn_flow(116))

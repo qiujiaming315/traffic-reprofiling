@@ -1,6 +1,8 @@
 import numpy as np
 import os
 from pathlib import Path
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import minimum_spanning_tree
 
 """Generate network profiles (topology + flow routes) as optimization input."""
 # google_nodes = np.zeros((17,), dtype=bool)
@@ -11,6 +13,13 @@ from pathlib import Path
 google_nodes = np.ones((11,), dtype=bool)
 google_links = [(0, 1), (0, 3), (0, 5), (1, 2), (1, 3), (1, 5), (2, 3), (2, 4), (3, 4), (3, 5), (3, 7), (4, 5), (4, 7),
                 (4, 10), (5, 6), (5, 7), (5, 8), (6, 7), (6, 8), (6, 9), (7, 8), (7, 10), (8, 9)]
+cev_nodes = np.zeros((44,), dtype=bool)
+cev_nodes[:31] = True
+cev_links = [(0, 31), (1, 31), (2, 32), (3, 32), (4, 32), (5, 32), (6, 32), (7, 33), (8, 33), (9, 33), (10, 34),
+             (11, 34), (12, 35), (13, 36), (14, 36), (15, 37), (16, 37), (17, 37), (18, 38), (19, 38), (20, 38),
+             (21, 39), (22, 39), (23, 40), (24, 40), (25, 41), (26, 41), (27, 42), (28, 42), (29, 43), (30, 43),
+             (31, 35), (31, 36), (32, 35), (32, 36), (33, 35), (33, 36), (34, 35), (34, 36), (35, 37), (36, 38),
+             (37, 39), (37, 42), (38, 40), (38, 42), (39, 41), (40, 43)]
 
 
 def generate_fat_tree(k=4):
@@ -125,16 +134,16 @@ def generate_tandem_net(num_hop, num_flow_main, num_hop_cross, num_flow_cross, s
     return net
 
 
-def generate_realistic_net(net_nodes, net_links, num_pair, source_edge=True, dest_edge=True, seed=None):
+def generate_dc_net(net_nodes, net_links, num_pair, source_edge=True, dest_edge=True, seed=None):
     """
-    Generate a network profile using the some realistic (or realistic motivated) network topology.
-    :param net_nodes: a boolean array that indicates which nodes are edge nodes
-                      (all the edge nodes should have smaller indices).
+    Generate a network profile using the some realistic datacenter network topology.
+    Routes are computed through shortest path.
+    :param net_nodes: a boolean array that indicates which nodes are edge nodes.
     :param net_links: a list of links in the network.
     :param num_pair: the number of S-D pairs in the network profile.
-    :param seed: the seed for random generator.
     :param source_edge: whether the source node can only be selected from edge nodes.
     :param dest_edge: whether the destination node can only be selected from edge nodes.
+    :param seed: the seed for random generator.
     :return: a numpy matrix describing the routes of the flows (network profile).
     """
     # Initiate random state and define a function for renewing the random seed (deterministically).
@@ -203,18 +212,114 @@ def generate_realistic_net(net_nodes, net_links, num_pair, source_edge=True, des
     return net.astype(int)
 
 
+def generate_tsn_net(net_nodes, net_links, num_app, source_edge=True, dest_edge=True, seed=None):
+    """
+    Generate a network profile using the some realistic Ethernet topology in the TSN setting.
+    Routes are computed through minimum spanning tree.
+    :param net_nodes: a boolean array that indicates which nodes are end devices.
+    :param net_links: a list of links in the network.
+    :param num_app: the number of messages to send through unicast, multicast, or broadcast.
+    :param source_edge: whether the source node can only be selected from end devices.
+    :param dest_edge: whether the destination node can only be selected from end devices.
+    :param seed: the seed for random generator.
+    :return: a numpy matrix describing the routes of the flows (network profile).
+    """
+    # Initiate random state and define a function for renewing the random seed (deterministically).
+    rstate = np.random.RandomState(seed)
+
+    def renew_seed(s):
+        if s is not None:
+            s *= 3
+            rstate.seed((s + 5) % 2 ** 32)
+        return s
+
+    # Create the adjacency matrix according to the specified topology.
+    adjacency_matrix = np.zeros((len(net_nodes), len(net_nodes)), dtype=bool)
+    for (node1, node2) in net_links:
+        adjacency_matrix[node1, node2] = True
+        adjacency_matrix[node2, node1] = True
+    # Create the routing table using the shortest paths (minimum hop routing).
+    routing_table = np.where(adjacency_matrix, np.arange(len(net_nodes)), -1)
+    distance = adjacency_matrix.astype(int)
+    for node_idx, mask in enumerate(adjacency_matrix):
+        mask = mask.copy()
+        # Extract the reachable nodes and randomly shuffle them.
+        reachable_nodes = np.arange(len(net_nodes))[mask]
+        rstate.shuffle(reachable_nodes)
+        seed = renew_seed(seed)
+        queue = list(reachable_nodes)
+        mask[node_idx] = True
+        while len(queue):
+            node = queue.pop(0)
+            # Extract the reachable new nodes and randomly shuffle them.
+            new_nodes = np.arange(len(net_nodes))[adjacency_matrix[node]]
+            rstate.shuffle(new_nodes)
+            seed = renew_seed(seed)
+            for n in new_nodes:
+                if not mask[n]:
+                    mask[n] = True
+                    routing_table[node_idx, n] = routing_table[node_idx, node]
+                    distance[node_idx, n] = distance[node_idx, node] + 1
+                    queue.append(n)
+    # Create the network profile.
+    net = np.zeros((0, len(net_nodes)), dtype=int)
+    # Select multiple (num_app) applications for the network.
+    cast_pattern = rstate.choice(3, size=num_app)
+    for cast in cast_pattern:
+        # Randomly select a source node.
+        source = rstate.choice(np.arange(len(net_nodes))[net_nodes]) if source_edge else rstate.randint(len(net_nodes))
+        seed = renew_seed(seed)
+        # Randomly select destination node(s) according to unicast, multicast, or broadcast.
+        dest_mask = net_nodes if dest_edge else np.ones_like(net_nodes)
+        for dest_idx in range(len(net_nodes)):
+            if distance[source, dest_idx] < 2:
+                dest_mask[dest_idx] = False
+        dest_candidate = np.arange(len(net_nodes))[dest_mask]
+        if cast == 0 or len(dest_candidate) == 1:  # Unicast.
+            dest_num = 1
+            destination = rstate.choice(dest_candidate, size=1)
+            seed = renew_seed(seed)
+        elif cast == 1 and len(dest_candidate) > 2:  # Multicast.
+            dest_num = rstate.randint(len(dest_candidate) - 2) + 2
+            seed = renew_seed(seed)
+            destination = rstate.choice(dest_candidate, size=dest_num, replace=False)
+            seed = renew_seed(seed)
+        else:  # Broadcast.
+            dest_num = len(dest_candidate)
+            destination = dest_candidate
+        # Establish the path according to the routing table.
+        sd_route = np.zeros((dest_num, len(net_nodes)), dtype=int)
+        for dest_idx, dest in enumerate(destination):
+            idx, node, table = 1, source, routing_table[:, dest]
+            while table[node] != -1:
+                sd_route[dest_idx, node] = idx
+                idx += 1
+                node = table[node]
+            sd_route[dest_idx, node] = idx
+        net = np.concatenate((net, sd_route), axis=0)
+    return net.astype(int)
+
+
 def generate_google_net(num_pair, seed=None):
     """
     Generate a network profile using the Google (US) network topology.
     The google network topology is motivated by https://cloud.google.com/about/locations#network.
     """
-    return generate_realistic_net(google_nodes, google_links, num_pair, True, False, seed)
+    return generate_dc_net(google_nodes, google_links, num_pair, True, False, seed)
 
 
 def generate_chameleon_net(num_pair, k=4, seed=None):
     chameleon_nodes, chameleon_links = generate_fat_tree(k)
     """Generate a network profile using the Chameleon fat-tree network topology."""
-    return generate_realistic_net(chameleon_nodes, chameleon_links, num_pair, True, True, seed)
+    return generate_dc_net(chameleon_nodes, chameleon_links, num_pair, True, True, seed)
+
+
+def generate_cev_net(num_pair, seed=None):
+    """
+    Generate a network profile using the orion CEV network topology.
+    The paper is available at https://ieeexplore.ieee.org/abstract/document/8700610/.
+    """
+    return generate_tsn_net(cev_nodes, cev_links, num_pair, True, True, seed)
 
 
 def save_file(output_path, net):
@@ -245,5 +350,6 @@ if __name__ == "__main__":
     # You may also choose to generate a tandem network.
     save_file(path, generate_tandem_net(10, 2, 2, 1))
     # Or you can generate a network motivated by some realistic network topology.
-    save_file(path, generate_google_net(10))
-    save_file(path, generate_chameleon_net(10))
+    save_file(path, generate_google_net(10))  # For the US-Topo (inter-datacenter).
+    save_file(path, generate_chameleon_net(10))  # For the fat-tree network (intra-datacenter).
+    save_file(path, generate_cev_net(10))  # For the Orion CEV network (TSN setting for Ethernet).

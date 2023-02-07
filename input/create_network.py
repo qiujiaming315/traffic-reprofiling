@@ -268,7 +268,7 @@ def generate_tsn_net(net_nodes, net_links, num_app, source_edge=True, dest_edge=
         source = rstate.choice(np.arange(len(net_nodes))[net_nodes]) if source_edge else rstate.randint(len(net_nodes))
         seed = renew_seed(seed)
         # Randomly select destination node(s) according to unicast, multicast, or broadcast.
-        dest_mask = net_nodes if dest_edge else np.ones_like(net_nodes)
+        dest_mask = net_nodes.copy() if dest_edge else np.ones_like(net_nodes)
         for dest_idx in range(len(net_nodes)):
             if distance[source, dest_idx] < 2:
                 dest_mask[dest_idx] = False

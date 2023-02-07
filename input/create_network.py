@@ -1,8 +1,6 @@
 import numpy as np
 import os
 from pathlib import Path
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import minimum_spanning_tree
 
 """Generate network profiles (topology + flow routes) as optimization input."""
 # google_nodes = np.zeros((17,), dtype=bool)

@@ -2,7 +2,7 @@ import numpy as np
 import octeract
 
 
-def set_basic(model, path_matrix, flow_profile, objective, weight):
+def set_basic(model, path_matrix, flow_profile, objective, weight, scheduler="fifo"):
     """
     Set the objective function and basic constraints for the NLP model.
     :param model: the template (non-linear program object) to formulate non-linear programs.
@@ -10,6 +10,7 @@ def set_basic(model, path_matrix, flow_profile, objective, weight):
     :param flow_profile: the flow profile.
     :param objective: the objective function.
     :param weight: the bandwidth weight profile.
+    :param scheduler: the schedulers applied at each hop in the network.
     :return: the number of basic (independent of flow orderings) constraints for this network.
     """
     # Set the model variables.
@@ -18,10 +19,15 @@ def set_basic(model, path_matrix, flow_profile, objective, weight):
         model.add_variable(f"D{flow_idx}", 0)
     for link_idx in range(num_link):
         model.add_variable(f"C{link_idx}", 0)
-    for flow_idx, flow_route in enumerate(path_matrix):
-        for link_idx, link_flow in enumerate(flow_route):
-            if link_flow:
-                model.add_variable(f"T{flow_idx}_{link_idx}", 0)
+    # Add local deadline variables according to the schedulers being used.
+    if scheduler == "fifo":
+        for link_idx in range(num_link):
+            model.add_variable(f"T{link_idx}", 0)
+    elif scheduler == "sced":
+        for flow_idx, flow_route in enumerate(path_matrix):
+            for link_idx, link_flow in enumerate(flow_route):
+                if link_flow:
+                    model.add_variable(f"T{flow_idx}_{link_idx}", 0)
     # Set the objective function.
     if objective == 0:
         obj_str = [f"C{link_idx}" for link_idx in range(num_link)]
@@ -41,7 +47,10 @@ def set_basic(model, path_matrix, flow_profile, objective, weight):
         model.add_constraint(f"D{flow_idx} <= {ddl}")
         model.add_constraint(f"D{flow_idx} <= {ub}")
         links = np.arange(num_link)[path_matrix[flow_idx]]
-        ddl_str = [f"T{flow_idx}_{link_idx}" for link_idx in links]
+        if scheduler == "fifo":
+            ddl_str = [f"T{link_idx}" for link_idx in links]
+        elif scheduler == "sced":
+            ddl_str = [f"T{flow_idx}_{link_idx}" for link_idx in links]
         ddl_str = " + ".join(ddl_str)
         ddl_str += f" <= {ddl} - D{flow_idx}"
         model.add_constraint(ddl_str)
@@ -52,9 +61,9 @@ def set_basic(model, path_matrix, flow_profile, objective, weight):
     return model.num_constraints()
 
 
-def formulate(path_matrix, flow_profile, objective, weight):
+def formulate_fifo(path_matrix, flow_profile, objective, weight):
     """
-    Formulate the input as a non-linear program instance and solve it with octeract solver.
+    Formulate the input as a non-linear program instance and solve it with octeract solver (for FIFO schedulers).
     :param path_matrix: network routes.
     :param flow_profile: the flow profile.
     :param objective: the objective function.
@@ -64,7 +73,53 @@ def formulate(path_matrix, flow_profile, objective, weight):
     """
     _, num_link = path_matrix.shape
     model = octeract.Model()
-    num_constraint = set_basic(model, path_matrix, flow_profile, objective, weight)
+    num_constraint = set_basic(model, path_matrix, flow_profile, objective, weight, "fifo")
+
+    def two_slope_solver(order, local=True):
+        # Remove the order-dependent constraints set by previous trails.
+        constraints = model.get_constraint_names()
+        for cn in constraints[num_constraint:]:
+            model.remove_constraint(cn)
+        # Set the order-dependent constraints.
+        for flow_low, flow_high in zip(order[:-1], order[1:]):
+            model.add_constraint(f"D{flow_high} >= D{flow_low}")
+        for link_idx in range(num_link):
+            link_mask = path_matrix[:, link_idx]
+            link_mask = link_mask[order]
+            link_order = order[link_mask]
+            base_str, base_r, base_ddl = "( 0", 0, "0"
+            rate_list = [f"{flow_profile[flow_idx, 1]} / D{flow_idx}" for flow_idx in link_order]
+            for flow_idx in link_order:
+                fr, fb, fd = flow_profile[flow_idx]
+                new_ddl = f"D{flow_idx}"
+                base_str += f" + ( {' + '.join(rate_list)} + {base_r} ) * ( {new_ddl} - {base_ddl} )"
+                model.add_constraint(f"C{link_idx} >= " + base_str + f" ) / ( T{link_idx} + {new_ddl})")
+                rate_list.remove(f"{fb} / D{flow_idx}")
+                base_r += fr
+                base_ddl = new_ddl
+        # Solve the model.
+        if local:
+            model.local_solve()
+        else:
+            model.global_solve()
+        return model.get_solution_objective_value(), model.get_solution_vector()
+
+    return two_slope_solver
+
+
+def formulate_sced(path_matrix, flow_profile, objective, weight):
+    """
+    Formulate the input as a non-linear program instance and solve it with octeract solver (for SCED schedulers).
+    :param path_matrix: network routes.
+    :param flow_profile: the flow profile.
+    :param objective: the objective function.
+    :param weight: the bandwidth weight profile.
+    :return: a function that takes as input flow orderings at every hop, generates the corresponding non-linear program
+             instance, and returns the solution of this instance.
+    """
+    _, num_link = path_matrix.shape
+    model = octeract.Model()
+    num_constraint = set_basic(model, path_matrix, flow_profile, objective, weight, "sced")
 
     def two_slope_solver(order, mask, local=True):
         # Remove the order-dependent constraints set by previous trails.

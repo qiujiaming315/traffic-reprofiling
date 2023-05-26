@@ -13,7 +13,7 @@ from lib.genetic_sced import GATwoSlopeOuter
 
 """
 Calculate minimum required total bandwidth for a given network (flow path + profile)
-through intelligent traffic reprofiling using SCED schedulers at every hop.
+through intelligent traffic reprofiling using SCED/FIFO schedulers at every hop.
 """
 
 
@@ -27,8 +27,11 @@ def main(opts):
         # Multiply end-to-end deadline by hop count when the loaded deadlines are specified as "per-hop".
         flow_profile[:, 2] = flow_profile[:, 2] * np.sum(path_matrix, axis=1)
     weight = load_weight(opts.objective, opts.weight, path_matrix.shape[1])
+    # Set the heuristic and NLP-based algorithms according to the scheduler.
     heuristic = fifo if opts.scheduler == 0 else sced
     nlp_genetic = GATwoSlopeFifo if opts.scheduler == 0 else GATwoSlopeOuter
+    net_parser.SCHEDULER = opts.scheduler
+    # Compute the bandwidth requirements of the baseline solutions.
     fr_solution = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
     nr_solution = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
     result = dict(path_matrix=path_matrix, fr=fr_solution, nr=nr_solution)
@@ -36,14 +39,14 @@ def main(opts):
     mode = check_mode(opts.mode)
     if mode == 1:
         num_workers = None if opts.num_workers <= 0 else opts.num_workers
-        best_solution, best_reprofiling, best_ddl, _ = heuristic.greedy(path_matrix, flow_profile, opts.objective,
+        best_solution, best_reprofiling, best_ddl, _ = net_parser.greedy(path_matrix, flow_profile, opts.objective,
                                                                          weight, k=opts.k, num_iter=opts.num_iter,
                                                                          num_workers=num_workers)
     else:
         # Run genetic algorithm to find a good ordering of flow per-hop deadlines.
         genetic = nlp_genetic(path_matrix, flow_profile, opts.objective, weight)
         best_solution, best_var, _ = genetic.evolve()
-        best_reprofiling, best_ddl, _ = net_parser.parse_solution(path_matrix, best_var, opts.scheduler)
+        best_reprofiling, best_ddl, _ = net_parser.parse_solution(path_matrix, best_var)
         # Uncomment the following code snippet if you want to perform sanity check on the solution.
         # check = net_parser.check_solution(path_matrix, flow_profile, best_var)
         # if check:

@@ -4,8 +4,9 @@ import re
 import time
 from pathlib import Path
 
-from lib.utils import load_net, load_weight, check_mode
+from lib.utils import load_net1, load_weight, check_mode
 import lib.network_parser as net_parser
+import lib.greedy as greedy
 import lib.heuristic_fifo as fifo
 import lib.heuristic_sced as sced
 from lib.genetic_fifo import GATwoSlopeFifo
@@ -20,7 +21,7 @@ through intelligent traffic reprofiling using SCED/FIFO schedulers at every hop.
 def main(opts):
     start = time.time()
     # Load the network and flow profile.
-    net_profile, (flow_profile, per_hop) = load_net(opts.net, opts.flow, opts.aggregate)
+    net_profile, (flow_profile, per_hop) = load_net1(opts.net, opts.flow, opts.aggregate)
     # Parse the input data and compute the minimum bandwidth of baseline solutions.
     path_matrix = net_parser.parse_link(net_profile)
     if per_hop:
@@ -31,6 +32,7 @@ def main(opts):
     heuristic = fifo if opts.scheduler == 0 else sced
     nlp_genetic = GATwoSlopeFifo if opts.scheduler == 0 else GATwoSlopeOuter
     net_parser.SCHEDULER = opts.scheduler
+    greedy.SCHEDULER = opts.scheduler
     # Compute the bandwidth requirements of the baseline solutions.
     fr_solution = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
     nr_solution = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
@@ -39,9 +41,9 @@ def main(opts):
     mode = check_mode(opts.mode)
     if mode == 1:
         num_workers = None if opts.num_workers <= 0 else opts.num_workers
-        best_solution, best_reprofiling, best_ddl, _ = net_parser.greedy(path_matrix, flow_profile, opts.objective,
-                                                                         weight, k=opts.k, num_iter=opts.num_iter,
-                                                                         num_workers=num_workers)
+        best_solution, best_reprofiling, best_ddl, _ = greedy.greedy(path_matrix, flow_profile, opts.objective,
+                                                                     weight, k=opts.k, num_iter=opts.num_iter,
+                                                                     num_workers=num_workers)
     else:
         # Run genetic algorithm to find a good ordering of flow per-hop deadlines.
         genetic = nlp_genetic(path_matrix, flow_profile, opts.objective, weight)

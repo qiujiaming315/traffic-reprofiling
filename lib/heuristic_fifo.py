@@ -1,5 +1,4 @@
 import numpy as np
-import bisect
 
 from lib.network_parser import get_objective, parse_solution
 
@@ -95,7 +94,7 @@ def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
     :param path_matrix: the network routes.
     :param flow_profile: the flow profile.
     :param reprofiling_delay: the reprofiling delays of the solution.
-    :param ddl: the local deadlines of the solution.
+    :param ddl: the link delays of the solution.
     :return: the actual per-hop bandwidth.
     """
     zero_ddl = 1e-15
@@ -115,7 +114,6 @@ def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
 
 
 def bandwidth_two_slope_(link_mask, link_ddl, rate, burst, reprofiling_delay):
-    # TODO: Implement the FIFO version.
     """
     Calculate the actual bandwidth at one hop.
     :param link_mask: mask to retrieve the subset of flows at this hop.
@@ -126,7 +124,7 @@ def bandwidth_two_slope_(link_mask, link_ddl, rate, burst, reprofiling_delay):
     :return: the bandwidth requirement at the inflection points of the aggregate service curve,
              and the aggregate long-term rate.
     """
-    zero_ddl = 1e-15
+    zero_ddl = 1e-10
     num_flow = len(link_mask)
     short_rate = np.sum(rate[:num_flow][link_mask])
     link_sort = np.argsort(reprofiling_delay)
@@ -152,10 +150,17 @@ def improve_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
     :param ddl: the local deadlines of the solution.
     :return: the reprofiling delay and local deadlines after improvement.
     """
-    zero_ddl = 1e-6
+    zero_ddl = 1e-15
     num_flow, num_link = path_matrix.shape
     long_rate, burst = flow_profile[:, 0], flow_profile[:, 1]
+    # Transform ddl into a set of local deadlines if ddl specifies a set of link deadlines.
+    if ddl.ndim == 1:
+        ddl = np.ones((num_flow, 1)) * ddl
+        ddl = np.where(path_matrix, ddl, 0)
+    # Initialize link delays.
+    delay = np.zeros((num_link,))
     # Pre-processing to determine the order to improve the links.
+    # TODO: try a different order to visit links.
     num_cover = np.zeros((num_link,), dtype=int)
     for link_idx in range(num_link):
         sub_net = path_matrix[path_matrix[:, link_idx]]
@@ -163,42 +168,54 @@ def improve_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
     link_order = np.arange(num_link)[np.argsort(-num_cover)]
     for link_idx in link_order:
         # Retrieve the link related data.
-        link_mask, link_ddl = path_matrix[:, link_idx], ddl[:, link_idx]
-        link_sort = np.argsort(-(link_ddl + reprofiling_delay))
-        link_mask = link_mask[link_sort]
-        link_sort = link_sort[link_mask]
-        link_ddl, link_reprofiling = link_ddl[link_sort], reprofiling_delay[link_sort]
-        link_long_rate, link_burst = long_rate[link_sort], burst[link_sort]
+        link_mask = path_matrix[:, link_idx]
+        link_ddl, link_reprofiling = ddl[:, link_idx][link_mask], reprofiling_delay[link_mask]
+        link_long_rate, link_burst = long_rate[link_mask], burst[link_mask]
+        link_budget = link_ddl + link_reprofiling
+        # Set the worst case link delay to the smallest local deadline.
+        link_delay = np.amin(link_ddl)
+        link_reprofiling = np.minimum(link_budget - link_delay, link_burst / link_long_rate)
+        reprofiling_delay[link_mask] = link_reprofiling
         # Compute the link bandwidth and room for reprofiling for each flow.
         zs_mask = reprofiling_delay < zero_ddl
-        short_rate = np.divide(flow_profile[:, 1], reprofiling_delay, out=np.copy(flow_profile[:, 0]),
-                               where=np.logical_not(zs_mask))
+        reprofiling_delay[zs_mask] = 0
+        short_rate = np.divide(burst, reprofiling_delay, out=np.copy(long_rate), where=np.logical_not(zs_mask))
         burst_mask = np.where(zs_mask, burst, 0)
-        rate = np.concatenate((short_rate, flow_profile[:, 0] - short_rate))
-        min_bd, link_rate = bandwidth_two_slope_(path_matrix[:, link_idx], ddl[:, link_idx], rate, burst_mask,
+        rate = np.concatenate((short_rate, long_rate - short_rate))
+        min_bd, link_rate = bandwidth_two_slope_(path_matrix[:, link_idx], link_delay, rate, burst_mask,
                                                  reprofiling_delay)
         bandwidth = max(np.nanmax(min_bd), link_rate)
-        link_sddl = np.sort(link_ddl + link_reprofiling)
-        reprofiling_room = (bandwidth - min_bd) * link_sddl
-        # Reprofile each flow and update the reprofiling delay and local deadline.
-        for flow_idx, (ddl2, s, r, b) in enumerate(zip(link_ddl, link_reprofiling, link_long_rate, link_burst)):
-            flow_ddl = max(0, ddl2 + s - b / r)
-            left = bisect.bisect_right(link_sddl, flow_ddl + zero_ddl)
-            right = bisect.bisect_left(link_sddl, ddl2 + s - zero_ddl)
-            for x, y in zip(link_sddl[left:right], reprofiling_room[left:right]):
-                y_max = y if s == 0 else max(0, x - ddl2) * b / s + y
-                if y_max < b:
-                    flow_ddl = max(flow_ddl, (b * x - y_max * (ddl2 + s)) / (b - y_max))
-            # Update the data according to the reprofiling decision.
-            assert flow_ddl < ddl2 + zero_ddl
-            link_ddl[flow_idx] = flow_ddl
-            link_reprofiling[flow_idx] = ddl2 + s - flow_ddl
-            left = bisect.bisect_right(link_sddl, flow_ddl + zero_ddl)
-            for idx, x in enumerate(link_sddl[left:right]):
-                x_old = 0 if s == 0 else max(0, x - ddl2) / s
-                reprofiling_room[left + idx] -= b * ((x - flow_ddl) / (ddl2 + s - flow_ddl) - x_old)
-        ddl[:, link_idx][link_sort] = link_ddl
-        reprofiling_delay[link_sort] = link_reprofiling
+        reprofiling_room = np.append(bandwidth - min_bd, bandwidth - link_rate)
+        # Reprofile all the flows and update the reprofiling delay.
+        room_mask = reprofiling_room < zero_ddl
+        right_idx = np.arange(len(room_mask))[room_mask[::-1]][0]
+        if right_idx == 0:
+            # Set the link delay to 0 since all the flows can be reprofiled to their long-term rates.
+            link_delay = 0
+            link_reprofiling = link_burst / link_long_rate
+        elif right_idx == 1:
+            # The case when minimum bandwidth is achieved at the last bandwidth checkpoint.
+            link_delay1, link_delay3 = 0, 0
+            link_delay2 = np.amax(link_delay + link_reprofiling - link_burst / link_long_rate)
+            if len(link_reprofiling) >= 2:
+                link_sort = np.argsort(link_reprofiling)
+                link_reprofiling_sort, link_burst_sort = link_reprofiling[link_sort], link_burst[link_sort]
+                link_room = reprofiling_room[-3] * (link_reprofiling_sort[-2] + link_delay)
+                if link_room < zero_ddl:
+                    delta = 0
+                else:
+                    denominator = (link_burst_sort[-1] * (
+                            link_reprofiling_sort[-1] - link_reprofiling_sort[-2]) - link_room *
+                                   link_reprofiling_sort[-1])
+                    delta = np.inf if denominator < zero_ddl else (link_room * link_reprofiling_sort[
+                        -1] ** 2) / denominator
+                link_delay3 = link_delay - delta
+            link_delay = max(link_delay1, link_delay2, link_delay3)
+            link_reprofiling = np.minimum(link_budget - link_delay, link_burst / link_long_rate)
+        # Update the link delays and reprofiling delays.
+        delay[link_idx] = link_delay
+        reprofiling_delay[link_mask] = link_reprofiling
+        # TODO: deadline reallocation.
     # Compute the actual bandwidth after one iteration of traffic smoothing.
-    actual_bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
-    return reprofiling_delay, ddl, actual_bandwidth
+    actual_bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, delay)
+    return reprofiling_delay, delay, actual_bandwidth

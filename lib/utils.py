@@ -37,43 +37,6 @@ def load_net(net_path, flow_path, aggregate=False):
     return net_topology, (flow_profile, per_hop)
 
 
-def load_net1(net_path, flow_path, aggregate=False):
-    """
-    Load data and do sanity check.
-    :param net_path: path to the network profile (topology and flow routes).
-    :param flow_path: path to the flow profile.
-    :param aggregate: whether the flows with same route and deadline class should be aggregated.
-    :return: the loaded data.
-    """
-    net_data, flow_data = np.load(net_path), np.load(flow_path)
-    net_topology, num_dest = net_data['net'], net_data['num_dest']
-    flow_single, per_hop = flow_data['flow'], flow_data['per_hop']
-    flow_profile = np.zeros((0, flow_single.shape[1]))
-    for flow, dn in zip(flow_single, num_dest):
-        flow_profile = np.concatenate((flow_profile, np.ones((dn, flow_single.shape[1])) * flow), axis=0)
-    if aggregate:
-        net_topology, flow_profile = aggregate_flow(net_topology, flow_profile)
-    net_type = net_topology.dtype
-    assert net_type is np.dtype(bool) or np.issubdtype(net_type, np.integer), f"Incorrect data type ({net_type}) " + \
-                                                                              "for network profile. Expect bool or int."
-    assert net_topology.ndim == 2, f"Incorrect dimension number ({net_topology.ndim}) for network profile. Expect 2."
-    assert np.all(np.sum(net_topology > 0,
-                         axis=1) >= 2), "Each flow in the network profile should pass through at least 2 nodes."
-    if net_type is np.dtype(int):
-        assert np.all(net_topology >= 0), "For cyclic network profiles, input data should not contain negative values."
-        ranked = True
-        for route in net_topology:
-            sort_route = np.sort(route[route > 0])
-            ranked = ranked and np.array_equal(sort_route, np.arange(len(sort_route)) + 1)
-        assert ranked, "For cyclic network profiles, nodes in each flow route should be ranked from 1 to n, " + \
-                       "where n is the number of nodes in the flow route."
-    assert flow_profile.ndim == 2, f"Incorrect dimension number ({net_topology.ndim}) of flow profile. Expect 2."
-    assert np.all(flow_profile >= 0), "All the values in flow profile should be non-negative."
-    assert net_topology.shape[0] == flow_profile.shape[
-        0], "Inconsistent flow number in network and flow profile detected."
-    return net_topology, (flow_profile, per_hop)
-
-
 def aggregate_flow(net_topology, flow_profile):
     """
     Aggregate flows with the same route and deadline class.

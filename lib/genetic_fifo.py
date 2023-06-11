@@ -15,7 +15,7 @@ class FifoOption:
     stable_generation: int = 6
     max_generation: int = float('inf')
     local_size: int = 6
-    log_base: float = 1.01
+    log_base: float = 1.1
     cross_rate: float = 0.5
     mutation_rate: float = 0.1
     err_tolerance: float = 1e-3
@@ -41,14 +41,14 @@ class GATwoSlopeFifo(GeneticAlgorithm):
         # Make sure the rate-proportional ordering is the first one to be explored.
         add_num, init_order = 1, list()
         rp_order = self.get_rp_order()
-        self.order_set.add(tuple(rp_order))
+        self.add_set_unique(rp_order)
         rp_seed = np.zeros_like(rp_order, dtype=float)
         rp_seed[rp_order] = np.arange(self.num_flow) / self.num_flow
         init_order.append(rp_seed)
         # Fill the initial set with random flow orderings.
         while add_num < self.opts.group_size:
             seed = np.random.rand(self.num_flow)
-            if add_set(self.order_set, tuple(np.argsort(seed))):
+            if self.add_set_unique(np.argsort(seed)):
                 init_order.append(seed)
                 add_num += 1
         self.group = np.array(init_order)
@@ -81,7 +81,7 @@ class GATwoSlopeFifo(GeneticAlgorithm):
             for seed in self.group:
                 mutation_mask = np.random.rand(self.num_flow) < self.opts.mutation_rate
                 seed = np.where(mutation_mask, np.random.rand(self.num_flow), seed)
-                if add_set(self.order_set, tuple(np.argsort(seed))):
+                if self.add_set_unique(np.argsort(seed)):
                     mutated.append(seed)
                     add_num += 1
                     if add_num >= add_size:
@@ -94,17 +94,18 @@ class GATwoSlopeFifo(GeneticAlgorithm):
         return
 
     def construct_set(self):
-        order_set = enum_permutation(np.arange(self.num_flow))
-        np.random.shuffle(order_set)
+        order_set_raw = enum_permutation(np.arange(self.num_flow))
+        np.random.shuffle(order_set_raw)
         # Put the ordering that covers the rate-proportional solution at the top of the list.
         # Ensure that the final result is no worse than rate-proportional by exploring the corresponding ordering first.
         rp_order = self.get_rp_order()
-        for idx, order in enumerate(order_set):
-            if np.array_equal(order, rp_order):
-                order_set[idx] = order_set[0]
-                order_set[0] = rp_order
-                break
-        self.order_set = order_set
+        order_set = [rp_order]
+        self.add_set_unique(rp_order)
+        for order in order_set_raw:
+            if self.add_set_unique(order):
+                order_set.append(order)
+        self.order_set = np.array(order_set)
+        self.ub = min(self.ub, len(self.order_set))
         return
 
     def get_rp_order(self):
@@ -117,3 +118,11 @@ class GATwoSlopeFifo(GeneticAlgorithm):
                                                                                    :]), axis=0)
         rp_order = np.argsort(np.amin(max_reprofiling, axis=0))
         return rp_order
+
+    def add_set_unique(self, order):
+        """Add a unique flow ordering to set."""
+        order_code = np.array([], dtype=int)
+        for link_idx in range(self.num_link):
+            link_mask = self.path_matrix[:, link_idx]
+            order_code = np.append(order_code, order[link_mask[order]])
+        return add_set(self.order_set, tuple(order_code))

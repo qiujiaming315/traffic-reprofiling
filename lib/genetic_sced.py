@@ -53,11 +53,28 @@ class GATwoSlopeOuter(GATwoSlopeFifo):
                         self.opt_solution[idx] = best_solution
         return
 
+    def construct_set(self):
+        order_set = enum_permutation(np.arange(self.num_flow))
+        np.random.shuffle(order_set)
+        # Put the ordering that covers the rate-proportional solution at the top of the list.
+        # Ensure that the final result is no worse than rate-proportional by exploring the corresponding ordering first.
+        rp_order = self.get_rp_order()
+        for idx, order in enumerate(order_set):
+            if np.array_equal(order, rp_order):
+                order_set[idx] = order_set[0]
+                order_set[0] = rp_order
+                break
+        self.order_set = order_set
+        return
+
     def get_optimal(self):
         # Return the best solution of the best inner genetic algorithm instance.
         best_idx = np.argmin(self.opt_solution)
         best_var = self.opt_var[best_idx]
         return best_var.get_optimal()
+
+    def add_set_unique(self, order):
+        return add_set(self.order_set, tuple(order))
 
 
 @dataclass

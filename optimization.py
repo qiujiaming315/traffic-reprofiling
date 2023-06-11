@@ -4,7 +4,7 @@ import re
 import time
 from pathlib import Path
 
-from lib.utils import load_net1, load_weight, check_mode
+from lib.utils import load_net, load_weight, check_mode
 import lib.network_parser as net_parser
 import lib.greedy as greedy
 import lib.heuristic_fifo as fifo
@@ -21,7 +21,7 @@ through intelligent traffic reprofiling using SCED/FIFO schedulers at every hop.
 def main(opts):
     start = time.time()
     # Load the network and flow profile.
-    net_profile, (flow_profile, per_hop) = load_net1(opts.net, opts.flow, opts.aggregate)
+    net_profile, (flow_profile, per_hop) = load_net(opts.net, opts.flow, opts.aggregate)
     # Parse the input data and compute the minimum bandwidth of baseline solutions.
     path_matrix = net_parser.parse_link(net_profile)
     if per_hop:

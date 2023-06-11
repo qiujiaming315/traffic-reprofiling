@@ -60,7 +60,8 @@ class GeneticAlgorithm:
         self.generation += 1
         self.stable = 0 if update else self.stable + 1
         self.terminate, multi_opt = True, False
-        if np.amax(self.opt_solution) - np.amin(self.opt_solution) < self.opts.err_tolerance:
+        if (np.amax(self.opt_solution) - np.amin(self.opt_solution)) / np.amax(
+                self.opt_solution) < self.opts.err_tolerance:
             multi_opt = True
             print("Terminating: Same optimal solutions observed enough times.")
         elif self.generation * self.opts.group_size >= self.ub:
@@ -195,7 +196,7 @@ class GeneticAlgorithm:
             self.opt_solution[max_idx] = solution
             self.opt_var[max_idx] = var
             self.opt_order[max_idx] = order
-        update = solution < min_solution - self.opts.err_tolerance
+        update = solution < min_solution * (1 - self.opts.err_tolerance)
         return update
 
     def get_thresh(self, scale, base):

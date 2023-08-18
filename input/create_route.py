@@ -342,7 +342,7 @@ def save_file(output_path, file_name, flow_routes):
     """
     Path(output_path).mkdir(parents=True, exist_ok=True)
     if type(flow_routes) is dict:
-        np.save(os.path.join(output_path, file_name + ".npz"), **flow_routes)
+        np.savez(os.path.join(output_path, file_name + ".npz"), **flow_routes)
     else:
         np.save(os.path.join(output_path, file_name + ".npy"), flow_routes)
     return

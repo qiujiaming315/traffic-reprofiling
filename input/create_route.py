@@ -210,6 +210,7 @@ def generate_dc_net(net_nodes, net_links, num_pair, source_edge=True, dest_edge=
     sd_route = np.zeros((1, len(net_nodes)), dtype=int)
     flow_routes_pruned = np.zeros((0, len(net_nodes) - np.sum(net_nodes)), dtype=int)
     sd_route_pruned = np.zeros((1, len(net_nodes) - np.sum(net_nodes)), dtype=int)
+    min_hop = 4 if prune else 2
     # Select multiple (num_pair) S-D pairs for the network.
     for _ in range(num_pair):
         sd_route[:], sd_route_pruned[:] = 0, 0
@@ -219,7 +220,7 @@ def generate_dc_net(net_nodes, net_links, num_pair, source_edge=True, dest_edge=
             # Select a random destination with the path between the corresponding S-D pair covering at least 2 hops.
             destination = rstate.choice(np.arange(len(net_nodes))[net_nodes]) if dest_edge else rstate.randint(
                 len(net_nodes))
-            if source != destination and len(routes[(source, destination)]) > 2:
+            if source != destination and len(routes[(source, destination)]) > min_hop:
                 break
         # Establish the path according to the route.
         route = routes[(source, destination)]
@@ -267,6 +268,7 @@ def generate_tsn_net(net_nodes, net_links, num_app, source_edge=True, dest_edge=
     # Create the flow routes.
     flow_routes = np.zeros((0, len(net_nodes)), dtype=int)
     flow_routes_pruned = np.zeros((0, len(net_nodes) - np.sum(net_nodes)), dtype=int)
+    min_hop = 4 if prune else 2
     # Select multiple (num_app) applications for the network.
     cast_pattern = rstate.choice(3, size=num_app)
     app_dest_num = list()
@@ -276,7 +278,7 @@ def generate_tsn_net(net_nodes, net_links, num_app, source_edge=True, dest_edge=
         # Randomly select destination node(s) according to unicast, multicast, or broadcast.
         dest_mask = net_nodes.copy() if dest_edge else np.ones_like(net_nodes)
         for dest_idx in range(len(net_nodes)):
-            if not net_nodes[dest_idx] or source == dest_idx or len(routes[(source, dest_idx)]) <= 2:
+            if not net_nodes[dest_idx] or source == dest_idx or len(routes[(source, dest_idx)]) <= min_hop:
                 dest_mask[dest_idx] = False
         dest_candidate = np.arange(len(net_nodes))[dest_mask]
         if cast == 0 or len(dest_candidate) == 1:  # Unicast.

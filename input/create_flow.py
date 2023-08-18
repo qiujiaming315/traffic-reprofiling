@@ -222,7 +222,7 @@ def save_file(output_path, file_name, flow, per_hop=False):
     :param per_hop: whether the deadline stands for per hop deadline (True) or end-to-end deadline (False).
     """
     Path(output_path).mkdir(parents=True, exist_ok=True)
-    np.save(os.path.join(output_path, file_name + ".npz"), flow=flow, per_hop=per_hop)
+    np.savez(os.path.join(output_path, file_name + ".npz"), flow=flow, per_hop=per_hop)
     return
 
 

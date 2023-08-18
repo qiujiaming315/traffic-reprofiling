@@ -42,7 +42,7 @@ def load_net(route_path, flow_path, aggregate=False, aggregate_path=""):
             np.save(os.path.join(aggregate_path, "flow_route.npy"), flow_routes)
             if flow_routes_pruned is not None:
                 np.save(os.path.join(aggregate_path, "flow_route_pruned.npy"), flow_routes_pruned)
-            np.savez(os.path.join(aggregate_path, "flow_profile.npy"), flow=flow_profile, per_hop=per_hop)
+            np.savez(os.path.join(aggregate_path, "flow_profile.npz"), flow=flow_profile, per_hop=per_hop)
     net_type = flow_routes.dtype
     assert net_type is np.dtype(bool) or np.issubdtype(net_type, np.integer), f"Incorrect data type ({net_type}) " + \
                                                                               "for flow routes. Expect bool or int."

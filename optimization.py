@@ -1,6 +1,6 @@
 import numpy as np
 import argparse
-import re
+import os
 import time
 from pathlib import Path
 
@@ -20,10 +20,10 @@ through intelligent traffic reprofiling using SCED/FIFO schedulers at every hop.
 
 def main(opts):
     start = time.time()
-    # Load the network and flow profile.
-    net_profile, (flow_profile, per_hop) = load_net(opts.net, opts.flow, opts.aggregate)
+    # Load the flow routes and flow profile.
+    flow_routes, (flow_profile, per_hop) = load_net(opts.route, opts.flow, opts.aggregate, opts.aggregate_path)
     # Parse the input data and compute the minimum bandwidth of baseline solutions.
-    path_matrix = net_parser.parse_link(net_profile)
+    path_matrix, link_map = net_parser.parse_link(flow_routes)
     if per_hop:
         # Multiply end-to-end deadline by hop count when the loaded deadlines are specified as "per-hop".
         flow_profile[:, 2] = flow_profile[:, 2] * np.sum(path_matrix, axis=1)
@@ -34,21 +34,23 @@ def main(opts):
     net_parser.SCHEDULER = opts.scheduler
     greedy.SCHEDULER = opts.scheduler
     # Compute the bandwidth requirements of the baseline solutions.
-    fr_solution = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
-    nr_solution = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
-    result = dict(path_matrix=path_matrix, fr=fr_solution, nr=nr_solution)
+    fr_solution, fr_per_hop = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
+    nr_solution, nr_per_hop = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
+    result = dict(path_matrix=path_matrix, link_map=link_map, fr=fr_solution, nr=nr_solution, fr_=fr_per_hop,
+                  nr_=nr_per_hop)
     # Determine the execution mode.
     mode = check_mode(opts.mode)
     if mode == 1:
         num_workers = None if opts.num_workers <= 0 else opts.num_workers
-        best_solution, best_reprofiling, best_ddl, _ = greedy.greedy(path_matrix, flow_profile, opts.objective,
-                                                                     weight, k=opts.k, num_iter=opts.num_iter,
-                                                                     num_workers=num_workers)
+        best_solution, best_reprofiling, best_ddl, _, best_per_hop = greedy.greedy(path_matrix, flow_profile,
+                                                                                   opts.objective, weight, k=opts.k,
+                                                                                   num_iter=opts.num_iter,
+                                                                                   num_workers=num_workers)
     else:
         # Run genetic algorithm to find a good ordering of flow per-hop deadlines.
         genetic = nlp_genetic(path_matrix, flow_profile, opts.objective, weight)
         best_solution, best_var, _ = genetic.evolve()
-        best_reprofiling, best_ddl, _ = net_parser.parse_solution(path_matrix, best_var)
+        best_reprofiling, best_ddl, best_per_hop = net_parser.parse_solution(path_matrix, best_var)
         # Uncomment the following code snippet if you want to perform sanity check on the solution.
         # check = net_parser.check_solution(path_matrix, flow_profile, best_var)
         # if check:
@@ -58,14 +60,12 @@ def main(opts):
     print(f"Full reprofiling solution: {fr_solution:.2f}.")
     print(f"No reprofiling solution: {nr_solution:.2f}.")
     print(f"Algorithm execution time: {end - start:.1f}s")
-    for key, value in zip(["solution", "reprofiling_delay", "ddl", "run_time"],
-                          [best_solution, best_reprofiling, best_ddl, end - start]):
+    for key, value in zip(["solution", "solution_", "reprofiling_delay", "ddl", "run_time"],
+                          [best_solution, best_per_hop, best_reprofiling, best_ddl, end - start]):
         result[key] = value
     # Save the results to the specified directory.
-    net_idx = re.match(r"net(\d+)\.npy", opts.net.replace('\\', '/').split('/')[-1]).group(1)
-    flow_idx = re.match(r"flow(\d+)\.npz", opts.flow.replace('\\', '/').split('/')[-1]).group(1)
     Path(opts.out).mkdir(parents=True, exist_ok=True)
-    np.savez(opts.out + f"/{path_matrix.shape[0]}_{net_idx}_{flow_idx}.npz", **result)
+    np.savez(os.path.join(opts.out, opts.file_name + ".npz"), **result)
     return
 
 
@@ -73,9 +73,10 @@ def getargs():
     """Parse command line arguments."""
 
     args = argparse.ArgumentParser()
-    args.add_argument('net', help="Path to the input npy file describing network topology and flow routes.")
+    args.add_argument('route', help="Path to the input npy/npz file describing flow routes.")
     args.add_argument('flow', help="Path to the input npz file describing flow profiles.")
     args.add_argument('out', help="Directory to save results.")
+    args.add_argument('file_name', help="Name of the file to save results.")
     args.add_argument('--scheduler', type=int, default=0,
                       help="Type of scheduler applied at each hop in the network. 0 for FIFO schedulers, " +
                            "1 for SCED schedulers.")
@@ -90,8 +91,11 @@ def getargs():
                            "or greedy (1, a heuristic-based greedy algorithm) mode.")
     args.add_argument('--aggregate', action="store_true",
                       help="Whether flows with same route and deadline class should be aggregated.")
+    args.add_argument('--aggregate_path', type=str, default="",
+                      help="Directory to save the aggregated flow routes and profiles. Only active when --aggregate " +
+                           "is true. Only save the data when the path is not an empty string.")
     args.add_argument('--num_workers', type=int, default=0,
-                      help="The number of workers for parallel computing. Currently only available for the greedy" +
+                      help="The number of workers for parallel computing. Currently only available for the greedy " +
                            "algorithm. If a non-positive value is given, use the all the processors.")
     args.add_argument('--k', type=int, default=4,
                       help="Number of (intermediate) initial solutions for the greedy algorithm to explore in each " +

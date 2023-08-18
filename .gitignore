@@ -3,6 +3,8 @@
 /backup/
 /input/*/
 /lib/*/
+/omnetpp/input/*/
+/omnetpp/output/
 /output/
 /viz/
 

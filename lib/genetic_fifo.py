@@ -12,7 +12,7 @@ from lib.octeract import formulate_fifo
 class FifoOption:
     group_size: int = 100
     survive_size: int = 50
-    stable_generation: int = 6
+    stable_generation: int = 3
     max_generation: int = float('inf')
     local_size: int = 6
     log_base: float = 1.1

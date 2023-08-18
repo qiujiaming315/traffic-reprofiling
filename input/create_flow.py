@@ -213,18 +213,16 @@ def generate_tsn_flow(num_flow, periodic=True, seed=None):
     return flow
 
 
-def save_file(output_path, flow, per_hop=False):
+def save_file(output_path, file_name, flow, per_hop=False):
     """
     Save the generated flow profile to the specified output location.
     :param output_path: the directory to save the flow profile.
+    :param file_name: name of the file to save the flow profile.
     :param flow: the flow profile.
     :param per_hop: whether the deadline stands for per hop deadline (True) or end-to-end deadline (False).
     """
-    num_flow = flow.shape[0]
-    output_path = os.path.join(output_path, str(num_flow), "")
     Path(output_path).mkdir(parents=True, exist_ok=True)
-    num_files = len(os.listdir(output_path))
-    np.savez(f"{output_path}flow{num_files + 1}.npz", flow=flow, per_hop=per_hop)
+    np.save(os.path.join(output_path, file_name + ".npz"), flow=flow, per_hop=per_hop)
     return
 
 

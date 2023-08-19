@@ -176,15 +176,17 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
     interface_idx = np.zeros((len(nodes),), dtype=int)
     for link, bandwidth in zip(links, link_bandwidth):
         src, dest = link[0], link[1]
-        # Set bandwidth to an infinite value if input is non-positive.
-        out_bw = f"{bandwidth[0]}bps" if bandwidth[0] > 0 else "100000000000000000000000000000000000000000000000000Gbps"
-        in_bw = f"{bandwidth[1]}bps" if bandwidth[1] > 0 else "100000000000000000000000000000000000000000000000000Gbps"
-        scenario_content.append(
-            f"        <set-channel-param src-module=\"{node_names[src]}\" src-gate=\"pppg$o[{interface_idx[src]}]\" "
-            f"par=\"datarate\" value=\"{out_bw}\"/>")
-        scenario_content.append(
-            f"        <set-channel-param src-module=\"{node_names[src]}\" src-gate=\"pppg$i[{interface_idx[src]}]\" "
-            f"par=\"datarate\" value=\"{in_bw}\"/>")
+        # Set the bandwidth if specified.
+        if bandwidth[0] > 0:
+            out_bw = f"{bandwidth[0]}bps"
+            scenario_content.append(
+                f"        <set-channel-param src-module=\"{node_names[src]}\" "
+                f"src-gate=\"pppg$o[{interface_idx[src]}]\" par=\"datarate\" value=\"{out_bw}\"/>")
+        if bandwidth[1] > 0:
+            in_bw = f"{bandwidth[1]}bps"
+            scenario_content.append(
+                f"        <set-channel-param src-module=\"{node_names[src]}\" "
+                f"src-gate=\"pppg$i[{interface_idx[src]}]\" par=\"datarate\" value=\"{in_bw}\"/>")
         interface_idx[src] += 1
         interface_idx[dest] += 1
     scenario_content.append(f"    </at>")

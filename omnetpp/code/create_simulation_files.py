@@ -185,8 +185,8 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
         if bandwidth[1] > 0:
             in_bw = f"{bandwidth[1]}bps"
             scenario_content.append(
-                f"        <set-channel-param src-module=\"{node_names[src]}\" "
-                f"src-gate=\"pppg$i[{interface_idx[src]}]\" par=\"datarate\" value=\"{in_bw}\"/>")
+                f"        <set-channel-param src-module=\"{node_names[dest]}\" "
+                f"src-gate=\"pppg$o[{interface_idx[dest]}]\" par=\"datarate\" value=\"{in_bw}\"/>")
         interface_idx[src] += 1
         interface_idx[dest] += 1
     scenario_content.append(f"    </at>")

@@ -1,9 +1,49 @@
 import numpy as np
 import argparse
 import os
+import math
 from pathlib import Path
 
 """Generate the configuration files for OMNeT++ to run simulations."""
+
+
+def round_up(n, decimals=0):
+    """Helper function to round up numbers to a specified decimal."""
+    multiplier = 10 ** decimals
+    return math.ceil(n * multiplier) / multiplier
+
+
+def round_down(n, decimals=0):
+    """Helper function to round down numbers to a specified decimal."""
+    multiplier = 10 ** decimals
+    return math.floor(n * multiplier) / multiplier
+
+
+def config_param(flow_profile, reprofiling_delay, packet_size):
+    """
+    Compute the configuration parameters of each flow.
+    :param flow_profile: the flow profiles.
+    :param reprofiling_delay: the reprofiling delay of each flow.
+    :param packet_size: size of a packet in Bytes.
+    :return: a list of parameters for each flow in the following order: token bucket size, packet send interval, send
+    interval resetting offset, bucket size of the 1st reprofiler, bucket size of the 2nd reprofiler, token generation
+    interval of the 2nd reprofiler.
+    """
+    zero_delay = 1e-10
+    params = list()
+    for profile, delay in zip(flow_profile, reprofiling_delay):
+        bucket_size = round_down(profile[1] / packet_size, 1) + 1
+        send_interval = round_up(1e6 / profile[0] * packet_size, 3)
+        offset = round_up((round_up(bucket_size) - bucket_size) * send_interval * 1e6)
+        bk1_size = round_up((profile[1] - profile[0] * delay) / packet_size, 1) + 1
+        if delay <= zero_delay:
+            # The second token bucket uses the same parameters with the first if no reprofiling is needed.
+            bk2_interval, bk2_size = send_interval, bk1_size
+        else:
+            bk2_interval = round_up(1e6 / (profile[1] / delay) * packet_size, 3)
+            bk2_size = 1
+        params.append([bucket_size, send_interval, offset, bk1_size, bk2_interval, bk2_size])
+    return params
 
 
 def flow_count(net_data, flows, save_dir):
@@ -48,15 +88,13 @@ def flow_count(net_data, flows, save_dir):
     return interface_flow_list
 
 
-def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofiling_data, link_bandwidth,
-                traffic_pattern, option):
+def compose_ini(interface_flow_list, net_data, flow_route, flow_params, link_bandwidth, traffic_pattern, option):
     """
     Compose the initialization and scenario manager file for OMNeT++.
     :param interface_flow_list: the list of flow(s) going through each link interface.
     :param net_data: network data containing node and link information.
     :param flow_route: the route of each flow.
-    :param flow_profile: the flow profiles.
-    :param reprofiling_data: the reprofiling parameters of each flow.
+    :param flow_params: the flow configuration parameters.
     :param link_bandwidth: bandwidth of each link. Each bidirectional link is decoupled into two unidirectional links.
     :param traffic_pattern: the traffic arrival pattern of each flow.
     :param option: option parameters.
@@ -75,7 +113,6 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
     ini_content.append("**.R*.rip.routePurgeTime = 1800s")
     # Retrieve data.
     nodes, node_names, links = net_data["nodes"], net_data["node_names"], net_data["links"]
-    reprofiling_delay = reprofiling_data['reprofiling_delay']
     app_idx_count = [0 for _ in range(len(nodes))]
     # Configure the applications.
     ini_content.append("#----------------udp application configuration----------------")
@@ -93,7 +130,7 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
         ini_content.append(f"**.{src_name}.app[{app_num_src}].destAddresses = \"{dest_name}\"")
         ini_content.append(f"**.{src_name}.app[{app_num_src}].destPort = {i + 1000}")
         ini_content.append(f"**.{src_name}.app[{app_num_src}].chooseDestAddrMode = \"perBurst\"")
-        ini_content.append(f"**.{src_name}.app[{app_num_src}].messageLength = {option.packet_size - 28}B")
+        ini_content.append(f"**.{src_name}.app[{app_num_src}].messageLength = {option.packet_size - 36}B")
         ini_content.append(f"**.{src_name}.app[{app_num_src}].sendInterval = 1ps")
         ini_content.append(f"**.{src_name}.app[{app_num_src}].startTime = {traffic_pattern[i][0]}s")
         ini_content.append(f"**.{src_name}.app[{app_num_src}].stopTime = {traffic_pattern[i][1]}s")
@@ -115,23 +152,46 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
         ini_content.append(f"**.{dest_name}.app[{app_num_dest}].delayLimit = 0s")
         app_idx_count[flow_dest] += 1
         # Manage the traffic arrival pattern of each flow.
-        cycle_time = traffic_pattern[i][2] + traffic_pattern[i][3]
+        cycle_time = round_up(traffic_pattern[i][2] + traffic_pattern[i][3], 1)
         cycle_num = (traffic_pattern[i][1] - traffic_pattern[i][0]) / cycle_time
-        cycle_num = max(1, int(cycle_num))
+        cycle_num = int(round_up(cycle_num))
         for j in range(cycle_num):
-            reset_time = ((traffic_pattern[i][0] + j * cycle_time) * 1e12 + flow_profile[i][
-                1] / option.packet_size) / 1e12
-            send_interval = round(1e6 / flow_profile[i][0] * option.packet_size, 3)
+            reset_time1 = round_up(traffic_pattern[i][0], 1) + j * cycle_time
+            reset_time2 = (reset_time1 * 1e12 + max(0, int(flow_params[i][0]) - 2)) / 1e12
+            # reset_time3 = (reset_time1 * 1e12 + flow_params[i][2]) / 1e12
+            reset_value1 = "1ps"
+            reset_value2 = f"{flow_params[i][1]}us"
+            # if reset_time2 < reset_time3:
+            #     reset_value2, reset_value3 = f"{option.simulation_time}s", f"{flow_params[i][1]}us"
+            # else:
+            #     reset_time3 = -1
+            #     reset_value2, reset_value3 = f"{flow_params[i][1]}us", "1ps"
             scenario_content.append(
-                f"    <at t=\"{reset_time}\">")
+                f"    <at t=\"{reset_time1}\">")
             scenario_content.append(
                 f"        <set-param module=\"{src_name}.app[{app_num_src}]\" "
-                f"par=\"sendInterval\" value=\"{send_interval}us\"/>")
+                f"par=\"sendInterval\" value=\"{reset_value1}\"/>")
             scenario_content.append("    </at>")
+            scenario_content.append(
+                f"    <at t=\"{reset_time2}\">")
+            scenario_content.append(
+                f"        <set-param module=\"{src_name}.app[{app_num_src}]\" "
+                f"par=\"sendInterval\" value=\"{reset_value2}\"/>")
+            scenario_content.append("    </at>")
+            # if reset_time3 > 0:
+            #     scenario_content.append(
+            #         f"    <at t=\"{reset_time3}\">")
+            #     scenario_content.append(
+            #         f"        <set-param module=\"{src_name}.app[{app_num_src}]\" "
+            #         f"par=\"sendInterval\" value=\"{reset_value3}\"/>")
+            #     scenario_content.append("    </at>")
     # Set the application number of each end-host.
     for i in range(len(nodes)):
         if nodes[i][0] == 0:
             ini_content.append(f"**.{node_names[i]}.numApps = {app_idx_count[i]}")
+    # Collect the reprofiling parameters.
+    bk_interval = [[params[1], params[4]] for params in flow_params]
+    bk_size = [[params[3], params[5]] for params in flow_params]
     # Configure the reprofilers at each link layer interface.
     ini_content.append("#----------------Traffic Conditioner within PPP interface----------------")
     for i in range(len(nodes)):
@@ -150,26 +210,14 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
                 ini_content.append(
                     f"**.{node_name}.ppp[{j}].egressTC.tokenGenerator2[{k}].storageModule = \"^.bucket2[{k}].server\"")
                 # Realize 2SRC using two token buckets:
-                bk1_interval = round(1e6 / flow_profile[flow_idx][0] * option.packet_size, 3)
-                bk1_burst = flow_profile[flow_idx][1] - flow_profile[flow_idx][0] * reprofiling_delay[flow_idx]
-                bk1_token = round(bk1_burst / option.packet_size, 1) + 1
-                if reprofiling_delay[flow_idx] == 0:
-                    # The second token bucket uses the same parameters with the first if no reprofiling is needed.
-                    bk2_interval = bk1_interval
-                    bk2_token = bk1_token
-                else:
-                    bk2_rate = flow_profile[flow_idx][1] / reprofiling_delay[flow_idx]
-                    bk2_interval = round(1e6 / bk2_rate * option.packet_size, 3)
-                    bk2_token = 1
-                bk_interval, bk_token = [bk1_interval, bk2_interval], [bk1_token, bk2_token]
-                for bk, (interval, token) in enumerate(zip(bk_interval, bk_token)):
+                for bk, (interval, size) in enumerate(zip(bk_interval[flow_idx], bk_size[flow_idx])):
                     bk += 1
                     ini_content.append(
                         f"**.{node_name}.ppp[{j}].egressTC.tokenGenerator{bk}[{k}].generationInterval = {interval}us")
                     ini_content.append(
-                        f"**.{node_name}.ppp[{j}].egressTC.bucket{bk}[{k}].server.maxNumTokens = {token}")
+                        f"**.{node_name}.ppp[{j}].egressTC.bucket{bk}[{k}].server.maxNumTokens = {size}")
                     ini_content.append(
-                        f"**.{node_name}.ppp[{j}].egressTC.bucket{bk}[{k}].server.initialNumTokens = {token}")
+                        f"**.{node_name}.ppp[{j}].egressTC.bucket{bk}[{k}].server.initialNumTokens = {size}")
     ini_content.append("*.scenarioManager.script = xmldoc(\"scenario.xml\")")
     # Set the bandwidth at each link.
     scenario_content.append(f"    <at t=\"30\">")
@@ -178,12 +226,12 @@ def compose_ini(interface_flow_list, net_data, flow_route, flow_profile, reprofi
         src, dest = link[0], link[1]
         # Set the bandwidth if specified.
         if bandwidth[0] > 0:
-            out_bw = f"{bandwidth[0]}bps"
+            out_bw = f"{round_up(bandwidth[0], 3)}bps"
             scenario_content.append(
                 f"        <set-channel-param src-module=\"{node_names[src]}\" "
                 f"src-gate=\"pppg$o[{interface_idx[src]}]\" par=\"datarate\" value=\"{out_bw}\"/>")
         if bandwidth[1] > 0:
-            in_bw = f"{bandwidth[1]}bps"
+            in_bw = f"{round_up(bandwidth[1], 3)}bps"
             scenario_content.append(
                 f"        <set-channel-param src-module=\"{node_names[dest]}\" "
                 f"src-gate=\"pppg$o[{interface_idx[dest]}]\" par=\"datarate\" value=\"{in_bw}\"/>")
@@ -215,10 +263,21 @@ def main(opts):
         flow_profile[:, 2] = flow_profile[:, 2] * (np.sum(flow_route > 0, axis=1) - 1)
     # Load the reprofiling parameters.
     reprofiling_data = np.load(opts.reprofiling)
+    solution_bandwidth = reprofiling_data["solution_"]
+    solution_link_map = reprofiling_data["link_map"]
+    solution_reprofiling_delay = reprofiling_data['reprofiling_delay']
+
+    solution_bandwidth = reprofiling_data["fr_"]
+    full_reprofiling_delay = np.concatenate(
+        (flow_profile[:, 2][np.newaxis, :], flow_profile[:, 1][np.newaxis, :] / flow_profile[:, 0][np.newaxis, :]),
+        axis=0)
+    full_reprofiling_delay = np.amin(full_reprofiling_delay, axis=0)
+    solution_reprofiling_delay = full_reprofiling_delay
+
     # Load the traffic patterns.
     traffic_pattern = np.load(opts.traffic)
     # Collect the bandwidth of each link.
-    bw_dict = {tuple(link): bw for link, bw in zip(reprofiling_data["link_map"], reprofiling_data["solution_"])}
+    bw_dict = {tuple(link): bw for link, bw in zip(solution_link_map, solution_bandwidth)}
     links = network_data["links"]
     link_bandwidth = np.zeros((len(links), 2))
     for link_idx, link in enumerate(links):
@@ -249,11 +308,12 @@ def main(opts):
         link_bandwidth *= 8e9
     else:
         raise Exception("Please set --datarate_unit from 'bps', 'Bps', 'Kbps', 'KBps', 'Mbps', 'MBps', 'Gbps', 'GBps'.")
+    # Compute the flow configuration parameters:
+    params = config_param(flow_profile, solution_reprofiling_delay, opts.packet_size)
     # Pre-process the flows.
     interface_flow_list = flow_count(network_data, flow_route, opts.out)
     # Compose the ini file.
-    compose_ini(interface_flow_list, network_data, flow_route, flow_profile, reprofiling_data, link_bandwidth,
-                traffic_pattern, opts)
+    compose_ini(interface_flow_list, network_data, flow_route, params, link_bandwidth, traffic_pattern, opts)
     return
 
 
@@ -269,13 +329,12 @@ def getargs():
     args.add_argument('out', help="Directory to save results.")
     args.add_argument('--simulation_time', type=float, default=200, help="Total simulation time.")
     args.add_argument('--datarate_unit', type=str, default="KBps",
-                      help="Unit of the reprofiling parameters. Available choices include 'bps', 'Bps', 'Kbps', 'KBps',"
-                           "'Mbps', 'MBps', 'Gbps', 'GBps'.")
+                      help="Unit of the reprofiling parameters. Available choices include 'bps', 'Bps', 'Kbps', "
+                           "'KBps', 'Mbps', 'MBps', 'Gbps', 'GBps'.")
     args.add_argument('--packet_size', type=int, default=100,
-                      help="Size of one packet in Bytes. Including 28 bytes of headers.")
+                      help="Size of one packet in Bytes. Including 36 bytes of headers (UDP+IPv4+PPP).")
     args.add_argument('--ned_name', type=str, default="test", help="Name of the ned file.")
     args.add_argument('--ini_name', type=str, default="test", help="Name of the ini file.")
-    args.add_argument('--package_name', type=str, default="test", help="Package name of the ned file.")
     return args.parse_args()
 
 

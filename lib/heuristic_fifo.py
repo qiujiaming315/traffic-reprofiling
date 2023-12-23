@@ -3,7 +3,7 @@ import numpy as np
 from lib.network_parser import get_objective, parse_solution
 
 """
-Functions related to traffic reprofiling Heuristics for network with FIFO schedulers.
+Functions related to traffic reprofiling heuristics for network with FIFO schedulers.
 """
 
 
@@ -73,7 +73,7 @@ def check_solution(path_matrix, flow_profile, solution):
     """
     err = 1e-3
     num_flow, num_link = path_matrix.shape
-    reprofiling_delay, ddl, bandwidth = parse_solution(path_matrix, solution, 0)
+    reprofiling_delay, ddl, bandwidth = parse_solution(path_matrix, solution)
     # Check if solution deadlines are non-negative.
     feasible1 = np.all(reprofiling_delay >= 0) and np.all(ddl >= 0)
     # Check if each flow in-network deadline stays in range.
@@ -143,7 +143,7 @@ def bandwidth_two_slope_(link_mask, link_ddl, rate, burst, reprofiling_delay):
 
 def improve_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
     """
-    Apply greedy re(re)profiling to improve the solution through reallocation of reprofiling delay and local deadlines.
+    Apply greedy reprofiling to improve the solution through reallocation of reprofiling delay and local deadlines.
     :param path_matrix: the network routes.
     :param flow_profile: the flow profile.
     :param reprofiling_delay: the reprofiling delays of the solution.

@@ -72,7 +72,7 @@ def parse_routing(rt_table, net_data, option):
 
 def main(opts):
     # Load the routing table recorder.
-    routing_table = open(opts.routing, "r").readlines()
+    routing_table = open(opts.routing_table, "r").readlines()
     # Load the network data.
     network_data = np.load(opts.net)
     # Create the directory to save the routing table.

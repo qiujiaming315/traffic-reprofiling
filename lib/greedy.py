@@ -112,7 +112,7 @@ def improve_solution(path_matrix, flow_profile, solution, objective, weight, min
     """
     reprofiling_delay, ddl = solution
     prev_bandwidth, initial_solution = np.inf, True
-    # Run the greedy re(re)profiling algorithm iteratively until the solution cannot be further improved.
+    # Run the greedy reprofiling algorithm iteratively until the solution cannot be further improved.
     improve_func = improve_fifo if SCHEDULER == 0 else improve_sced
     while True:
         # Improve the solution.

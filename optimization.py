@@ -23,7 +23,7 @@ def main(opts):
     # Load the flow routes and flow profile.
     flow_routes, (flow_profile, per_hop) = load_net(opts.route, opts.flow, opts.aggregate, opts.aggregate_path)
     # Parse the input data and compute the minimum bandwidth of baseline solutions.
-    path_matrix, link_map = net_parser.parse_link(flow_routes)
+    path_matrix, path_order, link_map = net_parser.parse_link(flow_routes)
     if per_hop:
         # Multiply end-to-end deadline by hop count when the loaded deadlines are specified as "per-hop".
         flow_profile[:, 2] = flow_profile[:, 2] * np.sum(path_matrix, axis=1)
@@ -52,7 +52,7 @@ def main(opts):
         best_solution, best_var, _ = genetic.evolve()
         best_reprofiling, best_ddl, best_per_hop = net_parser.parse_solution(path_matrix, best_var)
         # Uncomment the following code snippet if you want to perform sanity check on the solution.
-        # check = net_parser.check_solution(path_matrix, flow_profile, best_var)
+        # check = heuristic.check_solution(path_matrix, flow_profile, best_var)
         # if check:
         #     print("Pass Sanity Check.")
     end = time.time()
@@ -60,6 +60,9 @@ def main(opts):
     print(f"Full reprofiling solution: {fr_solution:.2f}.")
     print(f"No reprofiling solution: {nr_solution:.2f}.")
     print(f"Algorithm execution time: {end - start:.1f}s")
+    # Uncomment the following code snippet if you want to retrieve buffer bounds.
+    link_buffer, reprofiler_buffer = net_parser.get_buffer_bound(path_matrix, path_order, flow_profile,
+                                                                 best_reprofiling, best_ddl, best_per_hop)
     for key, value in zip(["solution", "solution_", "reprofiling_delay", "ddl", "run_time"],
                           [best_solution, best_per_hop, best_reprofiling, best_ddl, end - start]):
         result[key] = value

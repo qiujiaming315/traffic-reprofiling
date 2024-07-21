@@ -234,12 +234,12 @@ if __name__ == "__main__":
                      [2.0, 4.0, 2.0],
                      [3.0, 13.0, 5.0]
                      ])
-    save_file(path, flow)
+    save_file(path, "flow", flow)
     # Alternatively, you may generate and save a random flow profile.
-    save_file(path, generate_random_flow(10))
+    save_file(path, "flow", generate_random_flow(10))
     # Or you can generate a flow profile motivated by the Facebook paper (for inter-datacenter network).
-    save_file(path, generate_fb_flow(10))
+    save_file(path, "flow", generate_fb_flow(10))
     # Or you can generate a flow profile motivated by the Chameleon paper (for intra-datacenter network).
-    save_file(path, generate_chameleon_flow(10))
+    save_file(path, "flow", generate_chameleon_flow(10))
     # Or you can generate a flow profile for TSN network.
-    save_file(path, generate_tsn_flow(116))
+    save_file(path, "flow", generate_tsn_flow(116))

@@ -1,4 +1,18 @@
-# Network Bandwidth Minimization through Traffic Pacing
+# On the Benefits of Traffic “Reprofiling” the Multiple Hops Case—Part I
+
+<p align="center">
+    <img src="img/overview.png" alt="overview" width="60%"/>
+</p>
+
+## Overview
+
+This repository provides a Python implementation for:
+
+Jiaming Qiu, Jiayi Song, Roch Guérin, and Henry Sariowan, **"On the Benefits of Traffic “Reprofiling” the Multiple Hops Case—Part I"**
+[[paper]](https://ieeexplore.ieee.org/abstract/document/10509732/)
+
+This work is an extension of **"On the Benefits of Traffic “Reprofiling” the Single Hop Case"**
+[[paper]](https://ieeexplore.ieee.org/abstract/document/10423425/)
 
 ## Requirements
 
@@ -8,9 +22,9 @@ To keep a local copy of our code, clone this repository and navigate into the cl
 
 ```
 # First navigate to the directory where you want to keep a copy of the code.
-git clone https://github.com/qiujiaming315/traffic-pacing.git
+git clone https://github.com/qiujiaming315/traffic-reprofiling.git
 # Navigate into the cloned directory to get started.
-cd traffic-pacing
+cd traffic-reprofiling
 ```
 
 ## Usage
@@ -39,7 +53,7 @@ We use network profile to specify network topology as well as the route of each 
 The matrix may either be of type `bool` for feed-forward network or `int` for cyclic network. The following figure demonstrates an example of retrieving network profile matrices given the graph representations of the networks.
 
 <p align="center">
-    <img src="img/network_profile.png" alt="system_overview" width="80%"/>
+    <img src="img/network_profile.png" alt="network_profile" width="80%"/>
 </p>
 
 #### Flow Profile
@@ -57,16 +71,18 @@ The main script for running the minimization algorithm is `optimization.py`. Run
 - `net`: path to the input network profile.
 - `flow`: path to the input flow profile.
 - `out`: directory to save the output file.
+- `file_name`: name of the file to save results.
+- `--scheduler`: type of scheduler applied to each hop of the network. 0 for FIFO and 1 for SCED.
 - `--objective`: type of the objective function to minimize. Available choices include: 0 for the sum of link bandwidth, 1 for weighted sum of link bandwidth, 2 for maximum link bandwidth.
 - `--weight`: path to the link weights if the objective function is selected to be a weighted sum of link bandwidth.
 - `--mode`: bandwidth minimization algorithm to run, 0 for NLP-based algorithm, 1 for the greedy algorithm. Greedy algorithm is applied by default.
 
-For example, to compute the minimum required sum of link bandwidth using the greedy algorithm with network profile saved in `input/network/3/net1.npy` and flow profile saved in `input/flow/3/flow1.npz`, and save the results to `output/`, you should use
+For example, to compute the minimum required sum of link bandwidth with SCED schedulers using the greedy algorithm with network profile saved in `input/network/3/net1.npy` and flow profile saved in `input/flow/3/flow1.npz`, and save the results to `output/` under the name `result.npz`, you should use
 
 ```
 # Make sure you are in the root directory of this repo,
 # where optimization.py is stored.
-python optimization.py input/network/3/net1.npy input/flow/3/flow1.npz output --objective 0 --mode 1
+python optimization.py input/network/3/net1.npy input/flow/3/flow1.npz output result --scheduler 1 --objective 0 --mode 1
 ```
 
 ### Library
@@ -76,9 +92,12 @@ directory. You can begin by looking at the main optimization script to see how
 to make use of these modules.
 
 - `utils.py`: Implement various utility functions (*e.g.,* function to load input data).
-- `network_parser.py`: Implement the greedy algorithm as well as the baseline solutions.
+- `network_parser.py`: Helper functions that faciliate parsing the inputs and the solutions of the optimization.
 - `genetic.py`: A parent class that provides a generic implementation of the genetic algorithm.
-- `genetic_twoSlope.py`: Implement a genetic algorithm that performs guided random search to find the best solution based on solving multiple non-linear programs.
+- `genetic_fifo.py`: Implement a genetic algorithm that performs guided random search to find the best solution based on solving multiple non-linear programs, for networks with FIFO schedulers.
+- `genetic_sced.py`: Similar to `genetic_fifo.py`, but for networks with SCED schedulers.
+- `heuristic_fifo.py`: Implement Greedy and the baseline solutions for networks with FIFO schedulers.
+- `heuristic_sced.py`: Similar to `heuristic_fifo.py`, but for networks with SCED schedulers.
 - `order_generator.py`: Implement various functions that handle flow orderings.
 - `octeract.py`: Formulate the minimization problem into NLPs and call the Octeract engine to solve the generated NLPs.
 

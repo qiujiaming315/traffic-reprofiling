@@ -81,7 +81,7 @@ def getargs():
     args.add_argument('out', help="Directory to save results.")
     args.add_argument('file_name', help="Name of the file to save results.")
     args.add_argument('--scheduler', type=int, default=0,
-                      help="Type of scheduler applied at each hop in the network. 0 for FIFO schedulers, " +
+                      help="Type of scheduler applied at each hop of the network. 0 for FIFO schedulers, " +
                            "1 for SCED schedulers.")
     args.add_argument('--objective', type=int, default=0,
                       help="Type of objective function to minimize. 0 for total link bandwidth, " +

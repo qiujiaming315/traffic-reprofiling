@@ -48,13 +48,9 @@ def main(opts):
                                                                                    num_workers=num_workers)
     else:
         # Run genetic algorithm to find a good ordering of flow per-hop deadlines.
-        genetic = nlp_genetic(path_matrix, flow_profile, opts.objective, weight)
+        genetic = nlp_genetic(path_matrix, flow_profile, opts.objective, weight, opts.solver)
         best_solution, best_var, _ = genetic.evolve()
         best_reprofiling, best_ddl, best_per_hop = net_parser.parse_solution(path_matrix, best_var)
-        # Uncomment the following code snippet if you want to perform sanity check on the solution.
-        # check = heuristic.check_solution(path_matrix, flow_profile, best_var)
-        # if check:
-        #     print("Pass Sanity Check.")
     end = time.time()
     print(f"Best solution found: {best_solution:.2f}.")
     print(f"Full reprofiling solution: {fr_solution:.2f}.")
@@ -92,6 +88,8 @@ def getargs():
     args.add_argument('--mode', type=int, default=1,
                       help="Run in accurate (0, solve multiple non-linear programs and find the best result), " +
                            "or greedy (1, a heuristic-based greedy algorithm) mode.")
+    args.add_argument('--solver', type=int, default=1, help="The NLP solver to solve the optimization. 0 for " +
+                                                            "octeract and 1 for ipopt.")
     args.add_argument('--aggregate', action="store_true",
                       help="Whether flows with same route and deadline class should be aggregated.")
     args.add_argument('--aggregate_path', type=str, default="",

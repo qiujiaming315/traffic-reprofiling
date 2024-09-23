@@ -1,6 +1,6 @@
 import numpy as np
 
-from lib.network_parser import get_objective, parse_solution
+from lib.network_parser import get_objective
 
 """
 Functions related to traffic reprofiling heuristics for network with FIFO schedulers.
@@ -61,31 +61,6 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
     total_bandwidth = get_objective(bandwidth, objective, weight)
     return total_bandwidth, bandwidth
-
-
-def check_solution(path_matrix, flow_profile, solution):
-    """
-    Check whether the actual bandwidth is consistent with the solution result.
-    :param path_matrix: the network routes.
-    :param flow_profile: the flow profile.
-    :param solution: solution returned by the NLP solver.
-    :return: consistency of the solution.
-    """
-    err = 1e-3
-    num_flow, num_link = path_matrix.shape
-    reprofiling_delay, ddl, bandwidth = parse_solution(path_matrix, solution)
-    # Check if solution deadlines are non-negative.
-    feasible1 = np.all(reprofiling_delay >= 0) and np.all(ddl >= 0)
-    # Check if each flow in-network deadline stays in range.
-    total_ddl, sd_ub = flow_profile[:, 2], flow_profile[:, 1] / flow_profile[:, 0]
-    net_ddl = np.array([np.sum(ddl[path_matrix[flow_idx]]) for flow_idx in range(num_flow)])
-    feasible2 = np.all(net_ddl + reprofiling_delay <= total_ddl + err)
-    feasible3 = np.all(reprofiling_delay <= sd_ub + err)
-    feasible = feasible1 and feasible2 and feasible3
-    # Check if the computed bandwidth is consistent with the returned bandwidth.
-    actual_bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
-    tight = np.all(np.abs(actual_bandwidth - bandwidth) <= err)
-    return feasible and tight
 
 
 def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):

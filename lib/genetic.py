@@ -50,7 +50,7 @@ class GeneticAlgorithm:
             update = update or ud
             group_score.append(solution)
         group_score = np.array(group_score)
-        # Evaluate the results and keep the candidates with best solutions.
+        # Evaluate the results and keep the candidates with the best solutions.
         if self.survivor is not None:
             self.group = np.concatenate((self.survivor, self.group), axis=0)
             group_score = np.concatenate((self.score, group_score))
@@ -174,6 +174,14 @@ class GeneticAlgorithm:
         """Construct a set of all feasible orderings through enumeration when the domain is not too large."""
         return
 
+    def check_solution(self, var):
+        """
+        Perform sanity check on the solution.
+        :param var: The solution variables.
+        :return: whether the solution is valid.
+        """
+        return True
+
     def get_optimal(self):
         """Return the optimal solution once the algorithm terminates."""
         best_idx = np.argmin(self.opt_solution)
@@ -190,6 +198,11 @@ class GeneticAlgorithm:
         :param order: the ordering that specifies the solution.
         :return: whether the set of local optimal solutions gets updated.
         """
+        # Check whether the solution is valid.
+        valid = var is not None and self.check_solution(var)
+        if not valid:
+            print("Invalid solution rejected.")
+            return False
         max_solution, max_idx = np.amax(self.opt_solution), np.argmax(self.opt_solution)
         min_solution = np.amin(self.opt_solution)
         if solution < max_solution:

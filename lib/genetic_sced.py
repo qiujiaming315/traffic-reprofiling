@@ -45,8 +45,8 @@ class GATwoSlopeOuter(GATwoSlopeFifo):
                               self.rp_eval)
         solution, _, _ = var.evolve()
         self.rp_eval = False
-        update = self.add_opt(solution, var, order)
-        return solution, update
+        valid, update = self.add_opt(solution, var, order)
+        return solution, valid, update
 
     def refine_solution(self, num_refine):
         for idx, (solution, var) in enumerate(zip(self.opt_solution, self.opt_var)):

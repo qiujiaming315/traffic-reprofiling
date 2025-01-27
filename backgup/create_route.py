@@ -234,7 +234,8 @@ def generate_dc_net(net_nodes, net_links, num_pair, source_edge=True, dest_edge=
             sd_route_pruned[0, route_pruned] = np.arange(len(route_pruned)) + 1
             flow_routes_pruned = np.concatenate((flow_routes_pruned, sd_route_pruned), axis=0)
     flow_routes, flow_routes_pruned = flow_routes.astype(int), flow_routes_pruned.astype(int)
-    return_data = {"routes": flow_routes, "routes_pruned": flow_routes_pruned} if prune else flow_routes
+    # return_data = {"routes": flow_routes, "routes_pruned": flow_routes_pruned} if prune else flow_routes
+    return_data = flow_routes_pruned if prune else flow_routes
     return return_data
 
 
@@ -335,6 +336,15 @@ def generate_cev_net(num_pair, routing="shortest_path", routing_path="", prune=T
                             routing_path=routing_path, prune=prune, seed=seed)
 
 
+def generate_cev_net1(num_pair, routing="shortest_path", routing_path="", prune=True, seed=None):
+    """
+    Generate flow routes using the orion CEV network topology.
+    The paper is available at https://ieeexplore.ieee.org/abstract/document/8700610/.
+    """
+    return generate_dc_net(cev_nodes, cev_links, num_pair, source_edge=True, dest_edge=True, routing=routing,
+                           routing_path=routing_path, prune=prune, seed=seed)
+
+
 def save_file(output_path, file_name, flow_routes):
     """
     Save the generated flow routes to the specified output location.
@@ -352,16 +362,16 @@ def save_file(output_path, file_name, flow_routes):
 
 if __name__ == "__main__":
     # First, specify the directory to save the generated flow routes.
-    path = f"../../traffic-reprofiling/input/route/google/"
-    num_flow = 100
+    path = f"../../traffic-reprofiling/input/route/cev/"
+    num_flow = 10000
     # save_file(path, name, net.astype(bool))
     # Alternatively, you may generate and save a set of random flow routes.
     # save_file(path, name, generate_random_route(num_flow=3, num_node=5))
     # You may also choose to generate a tandem network.
     # save_file(path, name, generate_tandem_route(10, 2, 2, 1))
     # Or you can generate a network motivated by some realistic network topology.
-    for flow_idx in range(100):
-        save_file(os.path.join(path, str(num_flow)), f"route{flow_idx + 1}", generate_google_net(num_flow, prune=False))
+    for flow_idx in range(1000):
+        save_file(os.path.join(path, str(num_flow)), f"route{flow_idx + 1}", generate_cev_net1(num_flow, prune=True))
     # save_file(path, name, generate_google_net(10))  # For the US-Topo (inter-datacenter).
     # save_file(path, name, generate_chameleon_net(10))  # For the fat-tree network (intra-datacenter).
     # save_file(path, name, generate_cev_net(10))  # For the Orion CEV network (TSN setting for Ethernet).

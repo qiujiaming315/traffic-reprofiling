@@ -44,11 +44,13 @@ class GeneticAlgorithm:
         Check whether termination condition is satisfied.
         """
         # Evaluate each ordering and collect the results.
-        update, group_score = False, list()
+        valid, update, group_score = False, False, list()
         for order in self.group:
-            solution, ud = self.evaluate_order(order)
+            solution, va, ud = self.evaluate_order(order)
+            valid = valid or va
             update = update or ud
             group_score.append(solution)
+        update = (not valid) or update
         group_score = np.array(group_score)
         # Evaluate the results and keep the candidates with the best solutions.
         if self.survivor is not None:
@@ -88,8 +90,8 @@ class GeneticAlgorithm:
         :return: the solution and whether the set of local optimal solution gets updated.
         """
         solution, var = self.solver(order, self.mask)
-        update = self.add_opt(solution, var, order)
-        return solution, update
+        valid, update = self.add_opt(solution, var, order)
+        return solution, valid, update
 
     def refine_solution(self, num_refine):
         """
@@ -202,7 +204,7 @@ class GeneticAlgorithm:
         valid = var is not None and self.check_solution(var)
         if not valid:
             print("Invalid solution rejected.")
-            return False
+            return valid, False
         max_solution, max_idx = np.amax(self.opt_solution), np.argmax(self.opt_solution)
         min_solution = np.amin(self.opt_solution)
         if solution < max_solution:
@@ -210,7 +212,7 @@ class GeneticAlgorithm:
             self.opt_var[max_idx] = var
             self.opt_order[max_idx] = order
         update = solution < min_solution * (1 - self.opts.err_tolerance)
-        return update
+        return valid, update
 
     def get_thresh(self, scale, base):
         """

@@ -228,8 +228,8 @@ def save_file(output_path, file_name, flow, per_hop=False):
 
 if __name__ == "__main__":
     # First, specify the directory to save the generated flow profiles.
-    path = f"../../traffic-reprofiling/input/flow/google/"
-    num_flow = 100
+    path = f"../../traffic-reprofiling/input/flow/cev/"
+    num_flow = 10000
     # Or you can generate a flow profile motivated by the Facebook paper (for inter-datacenter network).
-    for flow_idx in range(100):
-        save_file(os.path.join(path, str(num_flow)), f"flow{flow_idx + 1}", generate_fb_flow(num_flow))
+    for flow_idx in range(1000):
+        save_file(os.path.join(path, str(num_flow)), f"flow{flow_idx + 1}", generate_tsn_flow(num_flow, periodic=False))

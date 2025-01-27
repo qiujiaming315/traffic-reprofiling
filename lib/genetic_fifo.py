@@ -72,8 +72,8 @@ class GATwoSlopeFifo(GeneticAlgorithm):
         if not self.enum:
             order = np.argsort(order)
         solution, var = self.solver(order)
-        update = self.add_opt(solution, var, order)
-        return solution, update
+        valid, update = self.add_opt(solution, var, order)
+        return solution, valid, update
 
     def cross_parent(self, p1, p2):
         # Exchange the value at positions selected probabilistically for each pair of parents.

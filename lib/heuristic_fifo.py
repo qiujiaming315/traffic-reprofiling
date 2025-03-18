@@ -1,6 +1,7 @@
 import numpy as np
 
-from lib.network_parser import get_objective
+from lib.network_parser import get_objective, parse_solution
+from lib.ipopt import formulate_fifo as ipopt_solver
 
 """
 Functions related to traffic reprofiling heuristics for network with FIFO schedulers.
@@ -35,32 +36,12 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     :param weight: the bandwidth weight profile.
     :return: the minimum bandwidth.
     """
-    # TODO: Test with larger network topology.
-    num_flow, num_link = path_matrix.shape
-    reprofiling_delay = np.zeros((num_flow,))
-    ddl = np.zeros((num_link,))
-    ddl_mask = np.zeros((num_link,), dtype=bool)
-    # Compute the local deadline at each hop by selecting the smallest local deadline among the flows in each iteration.
-    for _ in range(num_flow):
-        flow_ddl = np.ones((num_flow,)) * np.inf
-        for flow_idx in range(num_flow):
-            allocated_ddl = np.sum(ddl[path_matrix[flow_idx]])
-            remaining_ddl = flow_profile[flow_idx, 2] - allocated_ddl
-            vacant_link = np.logical_and(path_matrix[flow_idx], np.logical_not(ddl_mask))
-            # Compute the local deadline by evenly allocating the remaining deadline of each flow.
-            if np.sum(vacant_link) > 0:
-                flow_ddl[flow_idx] = remaining_ddl / np.sum(vacant_link)
-        # Select the smallest local deadline among all the flows.
-        small_idx = np.argmin(flow_ddl)
-        ddl[np.logical_and(path_matrix[small_idx], np.logical_not(ddl_mask))] = flow_ddl[small_idx]
-        ddl_mask[path_matrix[small_idx]] = True
-        # Finish the iteration if all the links get a local deadline assigned.
-        if np.all(ddl_mask):
-            break
-    assert np.all(ddl_mask)
-    bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
-    total_bandwidth = get_objective(bandwidth, objective, weight)
-    return total_bandwidth, bandwidth
+    nlp_solver = ipopt_solver(path_matrix, flow_profile, objective, weight, no_shaping=True)
+    # Specify an order arbitrarily.
+    order = np.arange(path_matrix.shape[0])
+    _, var = nlp_solver(order)
+    reprofiling_delay, ddl, bandwidth = parse_solution(path_matrix, var)
+    return bandwidth, reprofiling_delay, ddl
 
 
 def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):

@@ -26,7 +26,7 @@ def full_reprofiling(path_matrix, flow_profile, objective, weight):
     ddl = np.where(path_matrix, ddl, 0)
     bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
     total_bandwidth = get_objective(bandwidth, objective, weight)
-    return total_bandwidth, bandwidth
+    return total_bandwidth, bandwidth, None
 
 
 def no_reprofiling(path_matrix, flow_profile, objective, weight):
@@ -44,7 +44,7 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     ddl = np.where(path_matrix, ddl, 0)
     bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
     total_bandwidth = get_objective(bandwidth, objective, weight)
-    return total_bandwidth, bandwidth, ddl
+    return total_bandwidth, bandwidth, ddl, None
 
 
 def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):

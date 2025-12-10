@@ -40,8 +40,9 @@ def main(opts):
     net_parser.SCHEDULER = opts.scheduler
     greedy.SCHEDULER = opts.scheduler
     # Compute the bandwidth requirements of the baseline solutions.
-    fr_solution, fr_per_hop = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
-    nr_solution, nr_per_hop, nr_ddl = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
+    fr_solution, fr_per_hop, fr_priority = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
+    nr_solution, nr_per_hop, nr_ddl, nr_priority = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective,
+                                                                            weight)
     result = dict(path_matrix=path_matrix, link_map=link_map, fr=fr_solution, nr=nr_solution, fr_=fr_per_hop,
                   nr_=nr_per_hop)
     # Determine the execution mode.
@@ -74,7 +75,9 @@ def main(opts):
                           [best_solution, best_per_hop, best_reprofiling, best_ddl, end - start]):
         result[key] = value
     if opts.scheduler == 2:
-        result["priority_class"] = best_priority
+        # result["fr_priority"] = fr_priority
+        # result["nr_priority"] = nr_priority
+        result["priority"] = best_priority
     # Save the results to the specified directory.
     Path(opts.out).mkdir(parents=True, exist_ok=True)
     np.savez(os.path.join(opts.out, opts.file_name + ".npz"), **result)

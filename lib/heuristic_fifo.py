@@ -24,7 +24,7 @@ def full_reprofiling(path_matrix, flow_profile, objective, weight):
     flow_rate = np.amax(flow_rate, axis=0)
     bandwidth = np.sum(path_matrix * flow_rate[:, np.newaxis], axis=0)
     total_bandwidth = get_objective(bandwidth, objective, weight)
-    return total_bandwidth, bandwidth
+    return total_bandwidth, bandwidth, None
 
 
 def no_reprofiling(path_matrix, flow_profile, objective, weight):
@@ -41,7 +41,8 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     order = np.arange(path_matrix.shape[0])
     _, var = nlp_solver(order)
     reprofiling_delay, ddl, bandwidth = parse_solution(path_matrix, var)
-    return bandwidth, reprofiling_delay, ddl
+    total_bandwidth = get_objective(bandwidth, objective, weight)
+    return total_bandwidth, bandwidth, ddl, None
 
 
 def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):

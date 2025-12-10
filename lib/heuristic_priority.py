@@ -23,9 +23,24 @@ def full_reprofiling(path_matrix, flow_profile, objective, weight):
     :param weight: the bandwidth weight profile.
     :return: the minimum bandwidth.
     """
-    total_bandwidth, bandwidth = 0, 0
-    # TODO: implement full reprofiling for static priority.
-    return total_bandwidth, bandwidth
+    num_flow, num_link = path_matrix.shape
+    # Compute the maximum reprofiling delay.
+    reprofiling_delay = np.concatenate(
+        (flow_profile[:, 2][np.newaxis, :], flow_profile[:, 1][np.newaxis, :] / flow_profile[:, 0][np.newaxis, :]),
+        axis=0)
+    reprofiling_delay = np.amin(reprofiling_delay, axis=0)
+    # Evenly split the remaining deadline onto each hop.
+    ddl = ((flow_profile[:, 2] - reprofiling_delay) / np.sum(path_matrix, axis=1))[:, np.newaxis] * np.ones((num_link,))
+    ddl = np.where(path_matrix, ddl, 0)
+    # Determine the priority class assignment at each hop.
+    priority = np.zeros_like(ddl, dtype=int)
+    for link_idx in range(num_link):
+        link_mask = path_matrix[:, link_idx]
+        link_priority = priority_assignment(ddl[:, link_idx][link_mask])
+        priority[:, link_idx][link_mask] = link_priority
+    bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl, priority)
+    total_bandwidth = get_objective(bandwidth, objective, weight)
+    return total_bandwidth, bandwidth, priority
 
 
 def no_reprofiling(path_matrix, flow_profile, objective, weight):
@@ -37,9 +52,20 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     :param weight: the bandwidth weight profile.
     :return: the minimum bandwidth.
     """
-    bandwidth, reprofiling_delay, ddl = 0, 0, 0
-    # TODO: implement no reprofiling for static priority.
-    return bandwidth, reprofiling_delay, ddl
+    num_flow, num_link = path_matrix.shape
+    reprofiling_delay = np.zeros((num_flow,))
+    # Evenly split the deadline onto each hop.
+    ddl = (flow_profile[:, 2] / np.sum(path_matrix, axis=1))[:, np.newaxis] * np.ones((num_link,))
+    ddl = np.where(path_matrix, ddl, 0)
+    # Determine the priority class assignment at each hop.
+    priority = np.zeros_like(ddl, dtype=int)
+    for link_idx in range(num_link):
+        link_mask = path_matrix[:, link_idx]
+        link_priority = priority_assignment(ddl[:, link_idx][link_mask])
+        priority[:, link_idx][link_mask] = link_priority
+    bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl, priority)
+    total_bandwidth = get_objective(bandwidth, objective, weight)
+    return total_bandwidth, bandwidth, ddl, priority
 
 
 def priority_assignment(ddl):

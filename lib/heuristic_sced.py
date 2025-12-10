@@ -44,7 +44,7 @@ def no_reprofiling(path_matrix, flow_profile, objective, weight):
     ddl = np.where(path_matrix, ddl, 0)
     bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
     total_bandwidth = get_objective(bandwidth, objective, weight)
-    return total_bandwidth, bandwidth
+    return total_bandwidth, bandwidth, ddl
 
 
 def bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
@@ -162,4 +162,4 @@ def improve_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
         reprofiling_delay[link_sort] = link_reprofiling
     # Compute the actual bandwidth after one iteration of traffic smoothing.
     actual_bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl)
-    return reprofiling_delay, ddl, actual_bandwidth
+    return reprofiling_delay, ddl, actual_bandwidth, None

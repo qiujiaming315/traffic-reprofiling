@@ -5,6 +5,7 @@ from itertools import repeat
 from lib.network_parser import get_objective
 from lib.heuristic_fifo import improve_two_slope as improve_fifo
 from lib.heuristic_sced import improve_two_slope as improve_sced
+from lib.heuristic_priority import improve_two_slope as improve_priority
 
 """
 Framework of the heuristic-based Greedy algorithm.
@@ -35,7 +36,8 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
     if num_iter > 1:
         assert k > 1, "Please select more than 1 initial solution if you want more than 1 iteration of greedy search."
     # Declare variables to keep the best solution.
-    best_solution, best_reprofiling, best_ddl, best_bandwidth, best_ratio = np.inf, None, None, None, None
+    best_solution = np.inf
+    best_reprofiling, best_ddl, best_bandwidth, best_priority, best_ratio = None, None, None, None, None
     # Specify the two extremes of the importance region.
     low_ratio, high_ratio = 0, 1
     for iter_idx in range(num_iter):
@@ -60,14 +62,14 @@ def greedy(path_matrix, flow_profile, objective, weight, k=4, num_iter=2, num_wo
         improvement = (best_solution - solutions[best_idx][0]) / best_solution if iter_idx > 0 else np.inf
         # Update the best solution and the two extremes of the importance region.
         if solutions[best_idx][0] < best_solution:
-            best_solution, best_reprofiling, best_ddl, best_bandwidth = solutions[best_idx]
+            best_solution, best_reprofiling, best_ddl, best_bandwidth, best_priority = solutions[best_idx]
             best_ratio = reprofiling_ratios[best_idx]
         low_ratio = reprofiling_ratios[max(0, best_idx - 1)]
         high_ratio = reprofiling_ratios[min(len(reprofiling_ratios) - 1, best_idx + 1)]
         # Terminate the iteration if the improvement is small enough.
         if improvement < min_improvement:
             break
-    return best_solution, best_reprofiling, best_ddl, best_ratio, best_bandwidth
+    return best_solution, best_reprofiling, best_ddl, best_ratio, best_bandwidth, best_priority
 
 
 def greedy_(path_matrix, flow_profile, reprofiling_ratio, objective, weight):
@@ -93,10 +95,10 @@ def greedy_(path_matrix, flow_profile, reprofiling_ratio, objective, weight):
     ddl = ((deadline - reprofiling_delay) / np.sum(path_matrix, axis=1))[:, np.newaxis] * np.ones((num_link,))
     ddl = np.where(path_matrix, ddl, 0)
     # Improve the deadline assignment using the greedy heuristic.
-    new_solution, reprofiling_delay, ddl, new_bandwidth = improve_solution(path_matrix, flow_profile,
-                                                                           (reprofiling_delay, ddl),
-                                                                           objective, weight)
-    return new_solution, reprofiling_delay, ddl, new_bandwidth
+    new_solution, reprofiling_delay, ddl, new_bandwidth, priority = improve_solution(path_matrix, flow_profile,
+                                                                                     (reprofiling_delay, ddl),
+                                                                                     objective, weight)
+    return new_solution, reprofiling_delay, ddl, new_bandwidth, priority
 
 
 def improve_solution(path_matrix, flow_profile, solution, objective, weight, min_improvement=0.001):
@@ -111,16 +113,21 @@ def improve_solution(path_matrix, flow_profile, solution, objective, weight, min
     :return: the improved solution.
     """
     reprofiling_delay, ddl = solution
-    prev_bandwidth, initial_solution = np.inf, True
+    best_bandwidth, initial_solution = np.inf, True
+    best_rd, best_ddl, best_bd, best_p = None, None, None, None
     # Run the greedy reprofiling algorithm iteratively until the solution cannot be further improved.
-    improve_func = improve_fifo if SCHEDULER == 0 else improve_sced
+    improve_funcs = [improve_fifo, improve_sced, improve_priority]
+    improve_func = improve_funcs[SCHEDULER]
     while True:
         # Improve the solution.
-        reprofiling_delay, ddl, bandwidth = improve_func(path_matrix, flow_profile, reprofiling_delay, ddl)
+        reprofiling_delay, ddl, bandwidth, priority = improve_func(path_matrix, flow_profile, reprofiling_delay, ddl)
         current_bandwidth = get_objective(bandwidth, objective, weight)
         # Break when the improvement is marginal.
-        improvement = np.inf if initial_solution else (prev_bandwidth - current_bandwidth) / prev_bandwidth
+        improvement = np.inf if initial_solution else (best_bandwidth - current_bandwidth) / best_bandwidth
+        initial_solution = False
+        if current_bandwidth < best_bandwidth:
+            best_bandwidth = current_bandwidth
+            best_rd, best_ddl, best_bd, best_p = reprofiling_delay, ddl, bandwidth, priority
         if improvement < min_improvement:
             break
-        prev_bandwidth, initial_solution = current_bandwidth, False
-    return current_bandwidth, reprofiling_delay, ddl, bandwidth
+    return best_bandwidth, best_rd, best_ddl, best_bd, best_p

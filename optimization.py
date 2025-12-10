@@ -9,6 +9,7 @@ import lib.network_parser as net_parser
 import lib.greedy as greedy
 import lib.heuristic_fifo as fifo
 import lib.heuristic_sced as sced
+import lib.heuristic_priority as priority
 from lib.genetic_fifo import GATwoSlopeFifo
 from lib.genetic_sced import GATwoSlopeOuter
 
@@ -29,24 +30,34 @@ def main(opts):
         flow_profile[:, 2] = flow_profile[:, 2] * np.sum(path_matrix, axis=1)
     weight = load_weight(opts.objective, opts.weight, path_matrix.shape[1])
     # Set the heuristic and NLP-based algorithms according to the scheduler.
-    heuristic = fifo if opts.scheduler == 0 else sced
-    nlp_genetic = GATwoSlopeFifo if opts.scheduler == 0 else GATwoSlopeOuter
+    if opts.scheduler == 0:
+        heuristic, nlp_genetic = fifo, GATwoSlopeFifo
+    elif opts.scheduler == 1:
+        heuristic, nlp_genetic = sced, GATwoSlopeOuter
+    else:
+        heuristic, nlp_genetic = priority, None
+        priority.NUM_CLASS = opts.num_priority_class
     net_parser.SCHEDULER = opts.scheduler
     greedy.SCHEDULER = opts.scheduler
     # Compute the bandwidth requirements of the baseline solutions.
     fr_solution, fr_per_hop = heuristic.full_reprofiling(path_matrix, flow_profile, opts.objective, weight)
-    nr_solution, nr_per_hop = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
+    nr_solution, nr_per_hop, nr_ddl = heuristic.no_reprofiling(path_matrix, flow_profile, opts.objective, weight)
     result = dict(path_matrix=path_matrix, link_map=link_map, fr=fr_solution, nr=nr_solution, fr_=fr_per_hop,
                   nr_=nr_per_hop)
     # Determine the execution mode.
     mode = check_mode(opts.mode)
+    best_priority = None
     if mode == 1:
         num_workers = None if opts.num_workers <= 0 else opts.num_workers
-        best_solution, best_reprofiling, best_ddl, _, best_per_hop = greedy.greedy(path_matrix, flow_profile,
-                                                                                   opts.objective, weight, k=opts.k,
-                                                                                   num_iter=opts.num_iter,
-                                                                                   num_workers=num_workers)
+        best_solution, best_reprofiling, best_ddl, _, best_per_hop, best_priority = greedy.greedy(path_matrix,
+                                                                                                  flow_profile,
+                                                                                                  opts.objective,
+                                                                                                  weight, k=opts.k,
+                                                                                                  num_iter=opts.num_iter,
+                                                                                                  num_workers=num_workers)
     else:
+        assert opts.scheduler != 2, ("(NLP-based) accurate mode currently does not support static priority schedulers. "
+                                     "Please run in greedy mode instead.")
         # Run genetic algorithm to find a good ordering of flow per-hop deadlines.
         genetic = nlp_genetic(path_matrix, flow_profile, opts.objective, weight, opts.solver)
         best_solution, best_var, _ = genetic.evolve()
@@ -62,6 +73,8 @@ def main(opts):
     for key, value in zip(["solution", "solution_", "reprofiling_delay", "ddl", "run_time"],
                           [best_solution, best_per_hop, best_reprofiling, best_ddl, end - start]):
         result[key] = value
+    if opts.scheduler == 2:
+        result["priority_class"] = best_priority
     # Save the results to the specified directory.
     Path(opts.out).mkdir(parents=True, exist_ok=True)
     np.savez(os.path.join(opts.out, opts.file_name + ".npz"), **result)
@@ -78,7 +91,7 @@ def getargs():
     args.add_argument('file_name', help="Name of the file to save results.")
     args.add_argument('--scheduler', type=int, default=0,
                       help="Type of scheduler applied at each hop of the network. 0 for FIFO schedulers, " +
-                           "1 for SCED schedulers.")
+                           "1 for SCED schedulers, 2 for static priority scheduler.")
     args.add_argument('--objective', type=int, default=0,
                       help="Type of objective function to minimize. 0 for total link bandwidth, " +
                            "1 for weighted total link bandwidth, 2 for maximum link bandwidth.")
@@ -88,6 +101,8 @@ def getargs():
     args.add_argument('--mode', type=int, default=1,
                       help="Run in accurate (0, solve multiple non-linear programs and find the best result), " +
                            "or greedy (1, a heuristic-based greedy algorithm) mode.")
+    args.add_argument('--num-priority-class', type=int, default=8,
+                      help="Number of priority class. Only active when static priority is chosen as the scheduler.")
     args.add_argument('--solver', type=int, default=1, help="The NLP solver to solve the optimization. 0 for " +
                                                             "octeract and 1 for ipopt.")
     args.add_argument('--aggregate', action="store_true",

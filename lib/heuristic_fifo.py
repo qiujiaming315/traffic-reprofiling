@@ -174,4 +174,4 @@ def improve_two_slope(path_matrix, flow_profile, reprofiling_delay, ddl):
         # TODO: deadline reallocation.
     # Compute the actual bandwidth after one iteration of traffic smoothing.
     actual_bandwidth = bandwidth_two_slope(path_matrix, flow_profile, reprofiling_delay, delay)
-    return reprofiling_delay, delay, actual_bandwidth
+    return reprofiling_delay, delay, actual_bandwidth, None
